@@ -70,3 +70,22 @@
 
 /* Authentication */
 .auth-screen{min-height:100vh;display:grid;place-items:center;padding:28px;background:#c8b9a5;background-image:linear-gradient(90deg,#ffffff12 1px,transparent 1px),linear-gradient(#5d473a0c 1px,transparent 1px);background-size:42px 42px;color:#54473e}.auth-paper{position:relative;width:min(460px,100%);padding:46px 48px;background:#fffdf7;border:1px solid #d8cec2;box-shadow:12px 16px 35px #49382d45}.auth-paper:before{content:"";position:absolute;top:-13px;left:50%;width:130px;height:28px;background:#eadfcecc;transform:translateX(-50%) rotate(-2deg)}.auth-mark{display:flex;align-items:center;gap:8px;font:700 10px Arial;letter-spacing:.22em}.auth-mark svg{width:19px}.auth-kicker{margin:30px 0 8px;font:italic 14px Georgia;color:#8a7667}.auth-paper h1{margin:0 0 9px;font:500 42px/1 Georgia}.auth-copy{margin:0 0 28px;font:14px/1.6 Arial;color:#82756b}.auth-paper form{display:grid;gap:16px}.auth-paper label{display:grid;gap:7px}.auth-paper label span{display:flex;align-items:center;gap:6px;font:700 10px Arial;letter-spacing:.1em;text-transform:uppercase}.auth-paper label svg{width:14px}.auth-paper input{height:44px;border:1px solid #cfbfb1;background:#fff;padding:0 13px;color:#54473e;outline:none}.auth-paper input:focus{border-color:#8f6f68;box-shadow:0 0 0 3px #df9b9b22}.auth-submit,.recovery-card button{border:0;background:#776d62;color:white;padding:13px 17px;cursor:pointer}.auth-submit:disabled{opacity:.55}.auth-message{padding:10px;background:#f4ead9;font:12px/1.5 Arial}.auth-link,.auth-switch{display:block;border:0;background:transparent;color:#725e54;text-decoration:underline;cursor:pointer}.auth-link{margin:13px auto 0;font:12px Arial}.auth-switch{margin:18px auto 0;font:13px Georgia}.auth-security{display:flex;align-items:center;justify-content:center;gap:6px;margin:25px 0 0;font:10px Arial;color:#928479}.auth-security svg{width:13px}.recovery-card{display:grid;gap:10px;margin-top:16px;padding:14px;border:1px solid #c9aa70;background:#fbf2d8}.recovery-card code{overflow-wrap:anywhere;font:12px/1.5 monospace}.recovery-card p{margin:0;font:11px/1.5 Arial}.recovery-card button{padding:9px}.recovery-card button:last-child{background:#8d7461}@media(max-width:540px){.auth-paper{padding:38px 24px}.auth-paper h1{font-size:34px}}
+
+
+/* On phones, anchor ruled paper to the writing surface so every text baseline
+   stays aligned even when the selected journal font size changes. */
+@media(max-width:650px){
+ .book-spread .journal-page.paper-lined{background-image:none!important}
+ .book-spread .journal-page.paper-lined .writing-area{overflow:hidden}
+ .book-spread .journal-page.paper-lined .writing-area textarea{
+  display:block;width:100%;max-width:100%;min-height:416px;padding:0 2px!important;
+  line-height:var(--journal-line-height,32px)!important;
+  background-color:transparent!important;
+  background-image:repeating-linear-gradient(to bottom,transparent 0,transparent calc(var(--journal-line-height,32px) - 1px),#cfdde0 var(--journal-line-height,32px))!important;
+  background-size:100% var(--journal-line-height,32px)!important;
+  background-position:0 0!important;background-attachment:local!important;
+  overflow-x:hidden;overflow-y:auto;overflow-wrap:anywhere;word-break:break-word;white-space:pre-wrap;
+ }
+ .book-spread .journal-title,.book-spread .page-identity,.book-spread .date-row{max-width:100%}
+ .book-spread .journal-title{box-sizing:border-box}
+}
