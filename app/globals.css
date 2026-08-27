@@ -89,3 +89,38 @@
  .book-spread .journal-title,.book-spread .page-identity,.book-spread .date-row{max-width:100%}
  .book-spread .journal-title{box-sizing:border-box}
 }
+
+
+/* Compact, viewport-safe creative drawer for phones. */
+@media(max-width:650px){
+ .desk-screen .toolbox{
+  left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));width:auto;
+  display:flex;flex-direction:column;gap:8px;z-index:100;
+ }
+ .desk-screen .tool-rail{
+  order:2;flex:0 0 auto;min-height:72px;padding:6px 4px;
+  border-radius:18px;gap:2px;
+ }
+ .desk-screen .tool-rail button{min-width:0;flex:1;padding:7px 2px;font-size:10px}
+ .desk-screen .tool-rail button svg{width:20px;height:20px}
+ .desk-screen .tool-drawer{
+  order:1;position:relative;inset:auto;width:100%;min-height:0;
+  max-height:min(52dvh,430px);padding:18px 16px 16px;
+  border-radius:22px;overflow-x:hidden;overflow-y:auto;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  box-shadow:0 12px 32px #493a3045;
+ }
+ .desk-screen .tool-drawer .tape{
+  position:static;display:block;width:max-content;max-width:calc(100% - 44px);
+  margin:0 auto 10px;padding:4px 14px;transform:none;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center;
+ }
+ .desk-screen .drawer-close{position:sticky;float:right;top:0;margin:-7px -7px 0 0;z-index:3}
+ .desk-screen .tool-drawer section{clear:both;padding-top:4px}
+ .desk-screen .toolbox[data-tool=""]{gap:0}
+ .desk-screen .workspace{padding-bottom:110px}
+}
+
+@media(max-width:650px) and (max-height:700px){
+ .desk-screen .tool-drawer{max-height:42dvh}
+}
