@@ -15,6 +15,14 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
 
+  function formatEncryptionSetupError(error: unknown) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("public.user_key_bundles") || message.includes("schema cache")) {
+      return "Your account opened, but the Supabase migration has not been applied yet. Run supabase/migrations/001_secure_journal.sql in your project.";
+    }
+    return message ? `Your account opened, but encryption setup could not be completed: ${message}` : "Your account opened, but encryption setup could not be completed.";
+  }
+
   async function ensureEncryptionKeys(userId: string) {
     const supabase = createClient();
     const { data } = await supabase.from("user_key_bundles").select("user_id").eq("user_id", userId).maybeSingle();
@@ -25,7 +33,7 @@ export default function AuthPage() {
       wrapped_by_password: bundle.wrappedByPassword,
       wrapped_by_recovery: bundle.wrappedByRecovery,
     });
-    if (error) throw error;
+    if (error) throw new Error(error.message);
     setRecoveryCode(bundle.recoveryCode);
     return true;
   }
@@ -50,8 +58,8 @@ export default function AuthPage() {
           const created = await ensureEncryptionKeys(data.user.id);
           if (created) setMessage("Save your recovery code before continuing.");
           else router.push("/journal");
-        } catch {
-          setMessage("Your account opened, but encryption setup could not be completed.");
+        } catch (error) {
+          setMessage(formatEncryptionSetupError(error));
         }
       }
     }
