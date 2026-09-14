@@ -27,11 +27,12 @@ test("creative drawer stays usable inside a short mobile viewport", async ({ pag
   const layout = await page.evaluate(() => {
     const drawer = document.querySelector(".tool-drawer")!.getBoundingClientRect();
     const rail = document.querySelector(".tool-rail")!.getBoundingClientRect();
-    return { drawerBottom: drawer.bottom, drawerTop: drawer.top, railBottom: rail.bottom, viewportHeight: innerHeight, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
+    return { drawerBottom: drawer.bottom, drawerTop: drawer.top, drawerHeight: drawer.height, railBottom: rail.bottom, viewportHeight: innerHeight, overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth };
   });
   expect(layout.drawerTop).toBeGreaterThanOrEqual(0);
   expect(layout.drawerBottom).toBeLessThanOrEqual(layout.railBottom);
   expect(layout.railBottom).toBeLessThanOrEqual(layout.viewportHeight);
+  expect(layout.drawerHeight).toBeLessThanOrEqual(layout.viewportHeight * 0.33);
   expect(layout.overflow).toBeLessThanOrEqual(0);
 });
 
@@ -47,6 +48,32 @@ test("long page titles wrap without leaving the paper", async ({ page }) => {
   });
   expect(sizing.wraps).toBe(true);
   expect(sizing.inside).toBe(true);
+});
+
+test("long journal writing scrolls inside the mobile page", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  const writing = page.locator(".writing-area textarea");
+  await writing.fill(Array.from({ length: 40 }, (_, index) => `Journal line ${index + 1}`).join("\n"));
+  const scroll = await writing.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+    return { scrollable: element.scrollHeight > element.clientHeight, reachedEnd: element.scrollTop + element.clientHeight >= element.scrollHeight - 2 };
+  });
+  expect(scroll.scrollable).toBe(true);
+  expect(scroll.reachedEnd).toBe(true);
+});
+
+test("uploaded photos remain visible on the page after saving", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await page.getByRole("button", { name: "Photos" }).click();
+  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#d96f6f"/></svg>');
+  await page.locator('.tool-photos input[type="file"]').setInputFiles({ name: "memory.svg", mimeType: "image/svg+xml", buffer: svg });
+  const photo = page.locator(".journal-page .placed-photo img");
+  await expect(photo).toBeVisible();
+  await expect.poll(() => photo.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  await page.getByRole("button", { name: /Save|Saved quietly/ }).click();
+  await page.reload();
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await expect(page.locator(".journal-page .placed-photo img")).toBeVisible();
 });
 
 test("page geometry and decoration coordinates stay stable across mobile and desktop", async ({ page }) => {

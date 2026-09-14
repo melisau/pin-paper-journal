@@ -109,7 +109,7 @@
  .desk-screen .tool-rail button svg{width:20px;height:20px}
  .desk-screen .tool-drawer{
   order:1;position:relative;inset:auto;width:100%;min-height:0;
-  max-height:min(52dvh,430px);padding:18px 16px 16px;
+  max-height:min(32dvh,260px);padding:14px 14px 12px;
   border-radius:22px;overflow-x:hidden;overflow-y:auto;
   overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
   box-shadow:0 12px 32px #493a3045;
@@ -126,7 +126,7 @@
 }
 
 @media(max-width:650px) and (max-height:700px){
- .desk-screen .tool-drawer{max-height:42dvh}
+ .desk-screen .tool-drawer{max-height:min(28dvh,210px)}
 }
 
 /* Journal shelf empty state and encrypted cover palette */
@@ -157,6 +157,11 @@
  .desk-screen .journal-shell{width:min(100%,560px);max-width:560px}
  .book-spread .journal-page{aspect-ratio:7/10;min-height:0;padding:7.5cqw 6.5cqw 6cqw 9cqw!important}
  .desk-screen .writing-area textarea,.book-spread .writing-area textarea,.book-spread .saved-note{min-height:52cqw!important}
+ .book-spread .writing-area textarea{
+  height:52cqw!important;max-height:52cqw!important;overflow-y:auto!important;
+  overscroll-behavior:contain;touch-action:pan-y;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;scrollbar-color:#9c887777 transparent;
+ }
  .book-spread .tiny-list{margin-top:4cqw}
  .desk-screen .toolbox[data-tool=""]{pointer-events:none}
  .desk-screen .toolbox[data-tool=""] .tool-rail{pointer-events:auto}
