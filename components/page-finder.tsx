@@ -2,7 +2,7 @@
 
 import { Plus } from "lucide-react";
 
-export type PageSummary = { id: number; pageName: string; pageDate: string; title: string };
+export type PageSummary = { id: string | number; pageName: string; pageDate: string; title: string };
 
 type Props = {
   activeIndex: number;

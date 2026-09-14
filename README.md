@@ -39,4 +39,14 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
 - Client-side encryption, key wrapping and recovery-code primitives.
 - Owner-only database schema and private encrypted asset bucket policies.
 
-Next: connect editor save/load operations to encrypted Supabase records, encrypt photo bytes before upload, add journal lock/unlock UI, and add account recovery screens.
+### Password recovery configuration
+
+The app sends password-reset links to `/auth/callback?next=/account/recovery`. In Supabase Dashboard → Authentication → URL Configuration:
+
+- Set the local Site URL to `http://localhost:3000` while developing.
+- Add `http://localhost:3000/auth/callback` to Redirect URLs.
+- Add the deployed `https://your-domain.example/auth/callback` URL before production.
+
+Keep the Reset Password email template on `{{ .ConfirmationURL }}` (or ensure a custom template preserves `{{ .RedirectTo }}`). Supabase intentionally returns a successful reset response even when an email address has no account. Hosted projects should configure a production SMTP provider because the built-in sender is rate-limited and intended for initial testing.
+
+Recovery requires the one-time Pin & Paper recovery code shown when encryption is first created. It is never stored as readable text. The recovery screen unwraps the existing master key with that code, updates the Supabase Auth password, and then stores a new password-wrapped copy of the same master key.

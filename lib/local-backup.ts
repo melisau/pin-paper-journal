@@ -1,4 +1,4 @@
-import type { Book } from "@/components/journal-library";
+import type { Book } from "@/lib/journal-model";
 
 export type JournalBackup = {
   app: "pin-paper-journal";

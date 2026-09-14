@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -15,6 +15,18 @@ export default function AuthPage() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
+  const [needsRecovery, setNeedsRecovery] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const error = new URLSearchParams(window.location.search).get("error");
+      if (error === "recovery-session") setMessage("The recovery link is missing or expired. Request a new password-reset email.");
+      if (error === "confirmation") setMessage("The email link is invalid or expired. Request a new one.");
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   function formatEncryptionSetupError(error: unknown) {
     const message = error instanceof Error ? error.message : "";
@@ -48,6 +60,7 @@ export default function AuthPage() {
     event.preventDefault();
     setBusy(true);
     setMessage("");
+    setNeedsRecovery(false);
     const supabase = createClient();
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({
@@ -65,7 +78,12 @@ export default function AuthPage() {
           if (created) setMessage("Save your recovery code before continuing.");
           else router.push("/journal");
         } catch (error) {
-          setMessage(formatEncryptionSetupError(error));
+          const encryptionMessage = formatEncryptionSetupError(error);
+          const requiresRecovery = encryptionMessage.includes("operation-specific") || encryptionMessage.includes("decrypt");
+          setMessage(requiresRecovery
+            ? "Your account password is valid, but it no longer opens the journal encryption key. Use your recovery code to reconnect it."
+            : encryptionMessage);
+          setNeedsRecovery(requiresRecovery);
         }
       }
     }
@@ -74,11 +92,19 @@ export default function AuthPage() {
 
   async function resetPassword() {
     if (!email) return setMessage("Enter your email first.");
-    const supabase = createClient();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/callback?next=/account/recovery`,
-    });
-    setMessage(error ? error.message : "Password reset email sent.");
+    setBusy(true);
+    setNeedsRecovery(false);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/account/recovery`,
+      });
+      setMessage(error ? error.message : "If an account exists for this email, a reset link has been sent. Check spam too. You will need your Pin & Paper recovery code after opening the link.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The reset request could not be sent.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   return <main className="auth-screen">
@@ -93,6 +119,7 @@ export default function AuthPage() {
         <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "signin" ? "Open my journals" : "Create account"}</button>
       </form>
       {message && <p className="auth-message" role="status">{message}</p>}
+      {needsRecovery && <button className="auth-link recovery-link" onClick={() => router.push("/account/recovery")}>Use recovery code</button>}
       {recoveryCode && <div className="recovery-card"><strong>Your recovery code</strong><code>{recoveryCode}</code><p>Store it in a password manager. It is not saved as readable text.</p><button onClick={() => navigator.clipboard.writeText(recoveryCode)}>Copy code</button><button onClick={() => router.push("/journal")}>I saved it — continue</button></div>}
       {mode === "signin" && <button className="auth-link" onClick={resetPassword}>Forgot password?</button>}
       <button className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>

@@ -10,6 +10,7 @@ test("library fits the viewport and supports renaming", async ({ page }) => {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 
+  await page.getByRole("button", { name: "Edit library" }).click();
   await page.getByRole("button", { name: "Rename My August Journal" }).click();
   const name = page.getByRole("textbox", { name: "Journal name" });
   await name.fill("Mobile Notes");

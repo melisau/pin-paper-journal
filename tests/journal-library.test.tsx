@@ -21,6 +21,7 @@ describe("JournalLibrary", () => {
 
   it("renames a journal from the keyboard", () => {
     const props = renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "Edit library" }));
     fireEvent.click(screen.getByRole("button", { name: "Rename My Journal" }));
     const input = screen.getByRole("textbox", { name: "Journal name" });
     fireEvent.change(input, { target: { value: "Travel Notes" } });
@@ -30,14 +31,29 @@ describe("JournalLibrary", () => {
 
   it("requests deletion through the parent", () => {
     const props = renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "Edit library" }));
     fireEvent.click(screen.getByRole("button", { name: "Delete My Journal" }));
     expect(props.onDelete).toHaveBeenCalledWith(books[0]);
   });
 
   it("changes a journal cover colour", () => {
     const props = renderLibrary();
+    expect(screen.queryByRole("button", { name: "Change colour of My Journal" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Edit library" }));
     fireEvent.click(screen.getByRole("button", { name: "Change colour of My Journal" }));
     fireEvent.click(screen.getByRole("button", { name: "Dusty lilac" }));
     expect(props.onToneChange).toHaveBeenCalledWith("one", "lilac");
+  });
+
+  it("hides editing controls again when done", () => {
+    renderLibrary();
+    fireEvent.click(screen.getByRole("button", { name: "Edit library" }));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    expect(screen.queryByRole("button", { name: "Rename My Journal" })).not.toBeInTheDocument();
+  });
+
+  it("shows cloud errors even when the shelf is empty", () => {
+    renderLibrary({ books: [], message: "Your encryption key is locked." });
+    expect(screen.getByText("Your encryption key is locked.")).toBeInTheDocument();
   });
 });

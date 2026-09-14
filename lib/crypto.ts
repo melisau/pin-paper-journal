@@ -2,8 +2,16 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 600_000;
 
+function secureCrypto() {
+  if (!globalThis.crypto?.subtle) {
+    throw new Error("Secure encryption is unavailable in this browser. Open Pin & Paper over HTTPS, or use localhost on this computer.");
+  }
+  return globalThis.crypto.subtle;
+}
+
 export type EncryptedValue = { ciphertext: string; iv: string; version: 1 };
 export type WrappedKey = EncryptedValue & { salt: string; kdf: "PBKDF2-SHA256"; iterations: number };
+export type EncryptedBinary = { ciphertext: ArrayBuffer; iv: string; version: 1 };
 
 function bytesToBase64(bytes: Uint8Array) {
   let binary = "";
@@ -26,12 +34,13 @@ export function createRecoveryCode() {
 }
 
 export async function generateEncryptionKey() {
-  return crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  return secureCrypto().generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
 }
 
 async function derivePasswordKey(secret: string, salt: Uint8Array, iterations = PBKDF2_ITERATIONS) {
-  const material = await crypto.subtle.importKey("raw", encoder.encode(secret), "PBKDF2", false, ["deriveKey"]);
-  return crypto.subtle.deriveKey(
+  const subtle = secureCrypto();
+  const material = await subtle.importKey("raw", encoder.encode(secret), "PBKDF2", false, ["deriveKey"]);
+  return subtle.deriveKey(
     { name: "PBKDF2", hash: "SHA-256", salt: asBuffer(salt), iterations },
     material,
     { name: "AES-GCM", length: 256 },
@@ -43,12 +52,12 @@ async function derivePasswordKey(secret: string, salt: Uint8Array, iterations = 
 export async function encryptJson<T>(value: T, key: CryptoKey): Promise<EncryptedValue> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = encoder.encode(JSON.stringify(value));
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: asBuffer(iv) }, key, plaintext);
+  const ciphertext = await secureCrypto().encrypt({ name: "AES-GCM", iv: asBuffer(iv) }, key, plaintext);
   return { ciphertext: bytesToBase64(new Uint8Array(ciphertext)), iv: bytesToBase64(iv), version: 1 };
 }
 
 export async function decryptJson<T>(value: EncryptedValue, key: CryptoKey): Promise<T> {
-  const plaintext = await crypto.subtle.decrypt(
+  const plaintext = await secureCrypto().decrypt(
     { name: "AES-GCM", iv: asBuffer(base64ToBytes(value.iv)) },
     key,
     asBuffer(base64ToBytes(value.ciphertext)),
@@ -60,8 +69,9 @@ export async function wrapKey(key: CryptoKey, secret: string): Promise<WrappedKe
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const wrappingKey = await derivePasswordKey(secret, salt);
-  const rawKey = await crypto.subtle.exportKey("raw", key);
-  const ciphertext = await crypto.subtle.encrypt({ name: "AES-GCM", iv: asBuffer(iv) }, wrappingKey, rawKey);
+  const subtle = secureCrypto();
+  const rawKey = await subtle.exportKey("raw", key);
+  const ciphertext = await subtle.encrypt({ name: "AES-GCM", iv: asBuffer(iv) }, wrappingKey, rawKey);
   return {
     ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
     iv: bytesToBase64(iv),
@@ -74,12 +84,13 @@ export async function wrapKey(key: CryptoKey, secret: string): Promise<WrappedKe
 
 export async function unwrapKey(value: WrappedKey, secret: string) {
   const wrappingKey = await derivePasswordKey(secret, base64ToBytes(value.salt), value.iterations);
-  const rawKey = await crypto.subtle.decrypt(
+  const subtle = secureCrypto();
+  const rawKey = await subtle.decrypt(
     { name: "AES-GCM", iv: asBuffer(base64ToBytes(value.iv)) },
     wrappingKey,
     asBuffer(base64ToBytes(value.ciphertext)),
   );
-  return crypto.subtle.importKey("raw", rawKey, "AES-GCM", true, ["encrypt", "decrypt"]);
+  return subtle.importKey("raw", rawKey, "AES-GCM", true, ["encrypt", "decrypt"]);
 }
 
 export async function createAccountKeyBundle(password: string) {
@@ -95,7 +106,7 @@ export async function createAccountKeyBundle(password: string) {
 
 export async function createJournalKeyBundle(masterKey: CryptoKey, journalPassword?: string) {
   const journalKey = await generateEncryptionKey();
-  const masterRaw = bytesToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", masterKey)));
+  const masterRaw = bytesToBase64(new Uint8Array(await secureCrypto().exportKey("raw", masterKey)));
   return {
     journalKey,
     wrappedByMaster: await wrapKey(journalKey, masterRaw),
@@ -103,7 +114,22 @@ export async function createJournalKeyBundle(masterKey: CryptoKey, journalPasswo
   };
 }
 
+export async function encryptBinary(value: ArrayBuffer, key: CryptoKey): Promise<EncryptedBinary> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const ciphertext = await secureCrypto().encrypt({ name: "AES-GCM", iv: asBuffer(iv) }, key, value);
+  return { ciphertext, iv: bytesToBase64(iv), version: 1 };
+}
+
+export async function decryptBinary(value: ArrayBuffer, iv: string, key: CryptoKey) {
+  return secureCrypto().decrypt({ name: "AES-GCM", iv: asBuffer(base64ToBytes(iv)) }, key, value);
+}
+
 export async function unwrapJournalKey(masterKey: CryptoKey, wrappedKey: WrappedKey) {
-  const masterRaw = bytesToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", masterKey)));
+  const masterRaw = bytesToBase64(new Uint8Array(await secureCrypto().exportKey("raw", masterKey)));
   return unwrapKey(wrappedKey, masterRaw);
+}
+
+export async function rewrapAccountKeyWithRecovery(wrappedByRecovery: WrappedKey, recoveryCode: string, newPassword: string) {
+  const masterKey = await unwrapKey(wrappedByRecovery, recoveryCode.trim());
+  return { masterKey, wrappedByPassword: await wrapKey(masterKey, newPassword) };
 }
