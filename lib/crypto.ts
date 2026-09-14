@@ -102,3 +102,8 @@ export async function createJournalKeyBundle(masterKey: CryptoKey, journalPasswo
     wrappedByPassword: journalPassword ? await wrapKey(journalKey, journalPassword) : null,
   };
 }
+
+export async function unwrapJournalKey(masterKey: CryptoKey, wrappedKey: WrappedKey) {
+  const masterRaw = bytesToBase64(new Uint8Array(await crypto.subtle.exportKey("raw", masterKey)));
+  return unwrapKey(wrappedKey, masterRaw);
+}

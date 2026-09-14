@@ -5,4 +5,7 @@ out/
 .env.*
 !.env.example
 *.log
+playwright-report/
+test-results/
+blob-report/
 .DS_Store

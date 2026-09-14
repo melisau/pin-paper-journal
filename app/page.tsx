@@ -4,7 +4,8 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
-import { createAccountKeyBundle } from "@/lib/crypto";
+import { createAccountKeyBundle, unwrapKey, type WrappedKey } from "@/lib/crypto";
+import { setAccountMasterKey } from "@/lib/key-vault";
 
 export default function AuthPage() {
   const router = useRouter();
@@ -25,8 +26,12 @@ export default function AuthPage() {
 
   async function ensureEncryptionKeys(userId: string) {
     const supabase = createClient();
-    const { data } = await supabase.from("user_key_bundles").select("user_id").eq("user_id", userId).maybeSingle();
-    if (data) return false;
+    const { data, error: readError } = await supabase.from("user_key_bundles").select("user_id, wrapped_by_password").eq("user_id", userId).maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (data) {
+      setAccountMasterKey(await unwrapKey(data.wrapped_by_password as WrappedKey, password));
+      return false;
+    }
     const bundle = await createAccountKeyBundle(password);
     const { error } = await supabase.from("user_key_bundles").insert({
       user_id: userId,
@@ -34,6 +39,7 @@ export default function AuthPage() {
       wrapped_by_recovery: bundle.wrappedByRecovery,
     });
     if (error) throw new Error(error.message);
+    setAccountMasterKey(bundle.masterKey);
     setRecoveryCode(bundle.recoveryCode);
     return true;
   }
