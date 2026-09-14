@@ -41,7 +41,7 @@ export function RecoveryForm() {
         .eq("user_id", userData.user.id);
       if (wrapError) throw new Error(`Your password changed, but the encryption key could not be updated: ${wrapError.message}. Retry with the same new password and recovery code.`);
 
-      setAccountMasterKey(recovered.masterKey);
+      await setAccountMasterKey(recovered.masterKey, userData.user.id);
       setMessage("Password updated. Opening your encrypted journals…");
       router.replace("/journal");
     } catch (error) {

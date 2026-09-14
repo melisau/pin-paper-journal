@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { BookHeart, Check, CloudUpload, Download, Palette, Pencil, Plus, Settings2, Sparkles, Trash2, Upload, X } from "lucide-react";
+import { BookHeart, Check, CloudUpload, Download, LogOut, Palette, Pencil, Plus, Settings2, Sparkles, Trash2, Upload, X } from "lucide-react";
 import type { Book } from "@/lib/journal-model";
 
 export type { Book } from "@/lib/journal-model";
@@ -17,9 +17,10 @@ type Props = {
   onExport: () => void; onImport: (file: File) => void; onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void; onToneChange: (id: string, tone: string) => void;
   localMigrationCount?: number; migrationBusy?: boolean; migratedLocalCount?: number; onMigrateLocal?: () => void; onRemoveMigratedLocal?: () => void;
+  onSignOut?: () => void;
 };
 
-export function JournalLibrary({ books, busy = false, message, onCreate, onDelete, onExport, onImport, onOpen, onRename, onToneChange, localMigrationCount = 0, migrationBusy = false, migratedLocalCount = 0, onMigrateLocal, onRemoveMigratedLocal }: Props) {
+export function JournalLibrary({ books, busy = false, message, onCreate, onDelete, onExport, onImport, onOpen, onRename, onToneChange, localMigrationCount = 0, migrationBusy = false, migratedLocalCount = 0, onMigrateLocal, onRemoveMigratedLocal, onSignOut }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [paletteId, setPaletteId] = useState<string | null>(null);
   const [libraryEditing, setLibraryEditing] = useState(false);
@@ -30,7 +31,7 @@ export function JournalLibrary({ books, busy = false, message, onCreate, onDelet
 
   return <main className={`library-screen ${libraryEditing ? "editing-library" : ""}`}>
     <div className="library-copy"><span className="eyebrow">PIN & PAPER</span><h1>Your little corner<br/>of memories</h1><p>Thoughts, photos and little joys — all in one place.</p>
-      <div className="backup-actions"><button onClick={onExport}><Download/> Export backup</button><label><Upload/> Import backup<input type="file" accept="application/json,.json" onChange={event => { const file=event.target.files?.[0]; if(file)onImport(file); event.target.value=""; }}/></label>{books.length > 0 && <button className={libraryEditing ? "active" : ""} onClick={toggleLibraryEditing}>{libraryEditing ? <Check/> : <Settings2/>}{libraryEditing ? "Done" : "Edit library"}</button>}</div>
+      <div className="backup-actions"><button onClick={onExport}><Download/> Export backup</button><label><Upload/> Import backup<input type="file" accept="application/json,.json" onChange={event => { const file=event.target.files?.[0]; if(file)onImport(file); event.target.value=""; }}/></label>{books.length > 0 && <button className={libraryEditing ? "active" : ""} onClick={toggleLibraryEditing}>{libraryEditing ? <Check/> : <Settings2/>}{libraryEditing ? "Done" : "Edit library"}</button>}{onSignOut&&<button onClick={onSignOut} disabled={busy}><LogOut/> Sign out</button>}</div>
     </div>
     {localMigrationCount > 0 && <section className="migration-card">
       <span><CloudUpload/></span><div><strong>Bring your local journals with you</strong><p>{localMigrationCount} {localMigrationCount === 1 ? "journal is" : "journals are"} ready to encrypt and move to your private cloud shelf. A backup downloads first, and the local copies stay untouched.</p></div>
@@ -42,12 +43,12 @@ export function JournalLibrary({ books, busy = false, message, onCreate, onDelet
     </section>}
     {message && <p className="library-notice" role="status"><Sparkles/>{message}</p>}
     <div className="shelf-scene" aria-busy={busy}><div className="books-row">
-      {books.length === 0 ? <section className="empty-library" role="status">
+      {books.length === 0 ? !busy && <section className="empty-library" role="status">
         <span className="empty-book"><BookHeart/></span><span className="empty-sparkle">✦</span>
         <p className="empty-kicker">YOUR STORY STARTS HERE</p>
-        <h2>{busy ? "Opening your shelf…" : "A blank shelf, ready for you"}</h2>
-        <p>{busy ? "Unlocking your encrypted journals." : "Make a private little home for thoughts, photographs and everyday magic."}</p>
-        {!busy && <button onClick={onCreate}><Plus/> Create my first journal</button>}
+        <h2>A blank shelf, ready for you</h2>
+        <p>Make a private little home for thoughts, photographs and everyday magic.</p>
+        <button onClick={onCreate}><Plus/> Create my first journal</button>
       </section> : <>
         {books.map((book, index) => <article key={book.id} className="book-card">
           <button className={`book-cover ${book.tone}`} style={{ "--tilt": `${index % 2 ? 2 : -2}deg` } as React.CSSProperties} onClick={() => onOpen(book.id)} aria-label={`Open ${book.title}`}>

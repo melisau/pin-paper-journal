@@ -1,7 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
-  await page.addInitScript(() => localStorage.clear());
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem("e2e-storage-initialized")) {
+      localStorage.clear();
+      sessionStorage.setItem("e2e-storage-initialized", "true");
+    }
+  });
   await page.goto("/preview");
 });
 
@@ -36,6 +41,23 @@ test("creative drawer stays usable inside a short mobile viewport", async ({ pag
   expect(layout.overflow).toBeLessThanOrEqual(0);
 });
 
+test("mobile chrome keeps the page readable and clear of the bottom toolbar", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await expect(page.locator(".page-finder")).toBeHidden();
+  await page.getByRole("button", { name: "Pages" }).click();
+  await expect(page.locator(".page-finder")).toBeVisible();
+  const metadataSize = await page.locator(".page-identity label span").first().evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+  expect(metadataSize).toBeGreaterThanOrEqual(10);
+  await page.getByRole("button", { name: "Pages" }).click();
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const clearance = await page.evaluate(() => {
+    const paper = document.querySelector(".journal-page")!.getBoundingClientRect();
+    const toolbar = document.querySelector(".tool-rail")!.getBoundingClientRect();
+    return toolbar.top - paper.bottom;
+  });
+  expect(clearance).toBeGreaterThanOrEqual(8);
+});
+
 test("long page titles wrap without leaving the paper", async ({ page }) => {
   await page.getByRole("button", { name: "Open My August Journal" }).click();
   const title = page.getByRole("textbox", { name: "Page title" });
@@ -60,6 +82,26 @@ test("long journal writing scrolls inside the mobile page", async ({ page }) => 
   });
   expect(scroll.scrollable).toBe(true);
   expect(scroll.reachedEnd).toBe(true);
+});
+
+test("mobile date and little joys remain readable without mood crowding", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await expect(page.getByText(/today’s mood/i)).toHaveCount(0);
+  const date = page.getByRole("textbox", { name: "Date" });
+  const dateBox = await date.boundingBox();
+  expect(dateBox?.width).toBeGreaterThanOrEqual(100);
+  expect(dateBox?.height).toBeGreaterThanOrEqual(32);
+  const identityBox = await page.locator(".journal-page .page-identity").boundingBox();
+  const dateHeadingBox = await page.locator(".journal-page .date-row").boundingBox();
+  expect(dateHeadingBox!.y).toBeGreaterThan(identityBox!.y + identityBox!.height);
+  const joys = page.locator(".tiny-list");
+  const fit = await joys.evaluate(element => ({ clientHeight: element.clientHeight, pageHeight: element.parentElement?.parentElement?.clientHeight ?? 0 }));
+  expect(fit.clientHeight).toBeLessThan(fit.pageHeight * 0.35);
+  await expect(joys.getByRole("checkbox")).toHaveCount(0);
+  const firstJoy = joys.getByRole("textbox", { name: "Strikethrough slow mornings" });
+  await firstJoy.click();
+  await expect(joys.locator('input[value="slow mornings"]')).toHaveClass(/done/);
+  await expect(joys.locator(".joy-strike")).toHaveCount(0);
 });
 
 test("uploaded photos remain visible on the page after saving", async ({ page }) => {
@@ -103,6 +145,29 @@ test("page geometry and decoration coordinates stay stable across mobile and des
   await expect(sticker).toBeVisible();
 });
 
+test("desktop leaves share one proportional template", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await page.getByRole("button", { name: "New page" }).click();
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const layout = await page.locator(".book-spread").evaluate((spread) => {
+    const measure = (leaf: Element) => {
+      const pageBox = leaf.getBoundingClientRect();
+      const normalized = (selector: string) => {
+        const box = leaf.querySelector(selector)!.getBoundingClientRect();
+        return { top: (box.top - pageBox.top) / pageBox.height, width: box.width / pageBox.width, height: box.height / pageBox.height };
+      };
+      return { identity: normalized(".page-identity"), date: normalized(".date-row"), title: normalized(".journal-title"), writing: normalized(".writing-area"), joys: normalized(".tiny-list"), quote: normalized("blockquote") };
+    };
+    return { left: measure(spread.querySelector(".side-left")!), right: measure(spread.querySelector(".side-right")!) };
+  });
+  for (const key of ["identity", "date", "title", "writing", "joys", "quote"] as const) {
+    expect(layout.left[key].top).toBeCloseTo(layout.right[key].top, 2);
+    expect(layout.left[key].width).toBeCloseTo(layout.right[key].width, 2);
+    expect(layout.left[key].height).toBeCloseTo(layout.right[key].height, 2);
+  }
+  await expect(page.locator(".companion-number")).toHaveCount(2);
+});
+
 test("undo, redo, page ordering and deletion work", async ({ page }) => {
   await page.getByRole("button", { name: "Open My August Journal" }).click();
   const title = page.locator(".journal-title");
@@ -115,6 +180,7 @@ test("undo, redo, page ordering and deletion work", async ({ page }) => {
   await expect(title).toHaveValue("A changed title");
 
   await page.getByRole("button", { name: "New page" }).click();
+  await page.getByRole("button", { name: "Pages" }).click();
   await expect(page.getByRole("button", { name: "Move page left" })).toBeEnabled();
   await page.getByRole("button", { name: "Move page left" }).click();
   await expect(page.getByRole("textbox", { name: "Page name", exact: true })).toHaveValue("Page 2");

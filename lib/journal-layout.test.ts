@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { clampJournalPosition, photoSizePercent } from "./journal-layout";
+import { clampJournalPosition, pageScaledPixels, photoSizePercent } from "./journal-layout";
 
 describe("journal layout coordinates", () => {
   it("stores photo width as the same page percentage on every viewport", () => {
@@ -12,5 +12,9 @@ describe("journal layout coordinates", () => {
     expect(clampJournalPosition(-4, 20)).toBe(0);
     expect(clampJournalPosition(45, 20)).toBe(45);
     expect(clampJournalPosition(96, 20)).toBe(80);
+  });
+
+  it("scales typography from the same page design width", () => {
+    expect(pageScaledPixels(28)).toBe("5cqw");
   });
 });

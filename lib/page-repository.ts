@@ -41,6 +41,10 @@ export async function loadEncryptedPages(masterKey: CryptoKey, journalId: string
   return { pages, updatedAt: rows.reduce((latest, row) => row.updated_at > latest ? row.updated_at : latest, "") };
 }
 
+export async function reloadEncryptedAsset(masterKey: CryptoKey, journalId: string, assetId: string) {
+  return loadEncryptedAsset(assetId, await getEncryptedJournalKey(masterKey, journalId));
+}
+
 export async function syncEncryptedPages(options: {
   userId: string;
   journalId: string;
@@ -83,6 +87,7 @@ export async function syncEncryptedPages(options: {
       drawingAssetId: runtimePage.drawingAssetId,
       joys: runtimePage.joys,
       joysVisible: runtimePage.joysVisible,
+      joyPosition: runtimePage.joyPosition,
       pattern: runtimePage.pattern,
       paperColor: runtimePage.paperColor,
       font: runtimePage.font,

@@ -15,6 +15,7 @@ export type PageData = {
   drawingAssetId?: string;
   joys: Joy[];
   joysVisible: boolean;
+  joyPosition?: { x: number; y: number };
   pattern: string;
   paperColor: string;
   font: string;

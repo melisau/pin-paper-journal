@@ -40,7 +40,7 @@ describe("password recovery form", () => {
     expect(mocks.rewrap).toHaveBeenCalledWith({ ciphertext: "wrapped" }, "recovery-secret", "new-long-password");
     expect(mocks.updateUser).toHaveBeenCalledWith({ password: "new-long-password" });
     expect(mocks.updateEq).toHaveBeenCalledWith("user_id", "user-1");
-    expect(mocks.setMaster).toHaveBeenCalledWith({ type: "secret" });
+    expect(mocks.setMaster).toHaveBeenCalledWith({ type: "secret" }, "user-1");
     expect(mocks.updateUser.mock.invocationCallOrder[0]).toBeLessThan(mocks.updateEq.mock.invocationCallOrder[0]);
   });
 

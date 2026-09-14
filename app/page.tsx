@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import { BookOpen, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createAccountKeyBundle, unwrapKey, type WrappedKey } from "@/lib/crypto";
-import { setAccountMasterKey } from "@/lib/key-vault";
+import { restoreAccountMasterKey, setAccountMasterKey } from "@/lib/key-vault";
+
+const wrappedKeyCacheKey = (userId: string) => `pin-paper-wrapped-key:${userId}`;
 
 export default function AuthPage() {
   const router = useRouter();
@@ -19,6 +21,10 @@ export default function AuthPage() {
 
   useEffect(() => {
     let cancelled = false;
+    void createClient().auth.getSession().then(async ({ data }) => {
+      const userId = data.session?.user.id;
+      if (userId && await restoreAccountMasterKey(userId) && !cancelled) router.replace("/journal");
+    });
     queueMicrotask(() => {
       if (cancelled) return;
       const error = new URLSearchParams(window.location.search).get("error");
@@ -26,7 +32,7 @@ export default function AuthPage() {
       if (error === "confirmation") setMessage("The email link is invalid or expired. Request a new one.");
     });
     return () => { cancelled = true; };
-  }, []);
+  }, [router]);
 
   function formatEncryptionSetupError(error: unknown) {
     const message = error instanceof Error ? error.message : "";
@@ -37,11 +43,24 @@ export default function AuthPage() {
   }
 
   async function ensureEncryptionKeys(userId: string) {
+    if (await restoreAccountMasterKey(userId)) return false;
+    const cached = localStorage.getItem(wrappedKeyCacheKey(userId));
+    if (cached) {
+      try {
+        const wrapped = JSON.parse(cached) as WrappedKey;
+        await setAccountMasterKey(await unwrapKey(wrapped, password), userId);
+        return false;
+      } catch {
+        localStorage.removeItem(wrappedKeyCacheKey(userId));
+      }
+    }
     const supabase = createClient();
     const { data, error: readError } = await supabase.from("user_key_bundles").select("user_id, wrapped_by_password").eq("user_id", userId).maybeSingle();
     if (readError) throw new Error(readError.message);
     if (data) {
-      setAccountMasterKey(await unwrapKey(data.wrapped_by_password as WrappedKey, password));
+      const wrapped = data.wrapped_by_password as WrappedKey;
+      await setAccountMasterKey(await unwrapKey(wrapped, password), userId);
+      localStorage.setItem(wrappedKeyCacheKey(userId), JSON.stringify(wrapped));
       return false;
     }
     const bundle = await createAccountKeyBundle(password);
@@ -51,7 +70,8 @@ export default function AuthPage() {
       wrapped_by_recovery: bundle.wrappedByRecovery,
     });
     if (error) throw new Error(error.message);
-    setAccountMasterKey(bundle.masterKey);
+    await setAccountMasterKey(bundle.masterKey, userId);
+    localStorage.setItem(wrappedKeyCacheKey(userId), JSON.stringify(bundle.wrappedByPassword));
     setRecoveryCode(bundle.recoveryCode);
     return true;
   }
@@ -76,7 +96,7 @@ export default function AuthPage() {
         try {
           const created = await ensureEncryptionKeys(data.user.id);
           if (created) setMessage("Save your recovery code before continuing.");
-          else router.push("/journal");
+          else router.replace("/journal");
         } catch (error) {
           const encryptionMessage = formatEncryptionSetupError(error);
           const requiresRecovery = encryptionMessage.includes("operation-specific") || encryptionMessage.includes("decrypt");
