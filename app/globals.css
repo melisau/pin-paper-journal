@@ -139,3 +139,25 @@
 .backup-actions button.active{border-color:#806b5d;background:#78685c;color:#fffaf4}.library-screen:not(.editing-library) .books-row{padding-bottom:52px}.editing-library .book-card{animation:library-edit-in .22s ease-out}@keyframes library-edit-in{from{transform:translateY(4px);opacity:.82}}
 .migration-card{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:14px;width:min(760px,92vw);margin:26px auto -3vh;padding:14px 16px;border:1px solid #cbbda9;background:#fffaf0cc;color:#55483e;box-shadow:4px 7px 17px #49382d1c}.migration-card>span{display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:#dfe8dc;color:#647761}.migration-card svg{width:19px}.migration-card strong{font:500 16px Georgia}.migration-card p{margin:3px 0 0;font:11px/1.45 Arial;color:#82746a}.migration-card button{padding:10px 13px;border:0;background:#74665b;color:#fffaf4;font:600 10px Arial;cursor:pointer}.migration-card button:disabled{opacity:.6;cursor:wait}@media(max-width:650px){.migration-card{grid-template-columns:auto 1fr;margin-bottom:12px}.migration-card button{grid-column:1/-1;width:100%}}
 .recovery-link{font-weight:700}.recovery-page{width:min(520px,100%)}
+
+/* The same page coordinate system is used in a desktop spread and on phones. */
+.journal-shell{width:100%;max-width:1120px;margin-inline:auto}
+.book-spread{min-height:0;align-items:start}
+.book-spread .journal-page,.book-spread .companion-page{aspect-ratio:7/10;min-height:0;container-type:inline-size}
+.book-spread .journal-page,.companion-page{padding:7.5cqw 6.5cqw 6cqw 9cqw!important}
+.book-spread .journal-title{margin:4.6cqw 0 3.5cqw;font-size:clamp(23px,6cqw,36px)}
+.book-spread textarea.journal-title{display:block;field-sizing:content;min-height:2.35em;max-height:5.1em;line-height:1.12;resize:none;overflow:auto;overflow-wrap:anywhere;white-space:pre-wrap}
+.book-spread .saved-title{height:auto;max-height:3.4em;line-height:1.12;white-space:normal;overflow-wrap:anywhere;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3}
+.book-spread .writing-area textarea,.book-spread .saved-note{min-height:52cqw!important}
+.book-spread .placed-photo{max-width:none}
+.book-spread .placed-photo img{max-height:40cqw}
+.book-spread .placed-sticker{font-size:clamp(26px,7cqw,39px)}
+
+@media(max-width:650px){
+ .desk-screen .journal-shell{width:min(100%,560px);max-width:560px}
+ .book-spread .journal-page{aspect-ratio:7/10;min-height:0;padding:7.5cqw 6.5cqw 6cqw 9cqw!important}
+ .desk-screen .writing-area textarea,.book-spread .writing-area textarea,.book-spread .saved-note{min-height:52cqw!important}
+ .book-spread .tiny-list{margin-top:4cqw}
+ .desk-screen .toolbox[data-tool=""]{pointer-events:none}
+ .desk-screen .toolbox[data-tool=""] .tool-rail{pointer-events:auto}
+}

@@ -20,6 +20,7 @@ test("library fits the viewport and supports renaming", async ({ page }) => {
 
 test("creative drawer stays usable inside a short mobile viewport", async ({ page }) => {
   await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await expect(page.locator(".tool-drawer")).toBeHidden();
   await page.getByRole("button", { name: "Photos" }).click();
   await expect(page.getByText("Add pictures")).toBeVisible();
 
@@ -32,6 +33,47 @@ test("creative drawer stays usable inside a short mobile viewport", async ({ pag
   expect(layout.drawerBottom).toBeLessThanOrEqual(layout.railBottom);
   expect(layout.railBottom).toBeLessThanOrEqual(layout.viewportHeight);
   expect(layout.overflow).toBeLessThanOrEqual(0);
+});
+
+test("long page titles wrap without leaving the paper", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  const title = page.getByRole("textbox", { name: "Page title" });
+  await title.fill("Today, I want to remember the quiet details that made this very long day feel especially meaningful");
+  const sizing = await title.evaluate((element) => {
+    const field = element as HTMLTextAreaElement;
+    const page = field.closest(".journal-page")!.getBoundingClientRect();
+    const box = field.getBoundingClientRect();
+    return { wraps: field.scrollHeight > parseFloat(getComputedStyle(field).lineHeight), inside: box.right <= page.right };
+  });
+  expect(sizing.wraps).toBe(true);
+  expect(sizing.inside).toBe(true);
+});
+
+test("page geometry and decoration coordinates stay stable across mobile and desktop", async ({ page }) => {
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await page.getByRole("button", { name: "Stickers" }).click();
+  await page.locator(".sticker-grid button").first().click();
+  const journal = page.locator(".journal-page");
+  const sticker = journal.locator(".placed-sticker").first();
+
+  const mobile = await journal.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const item = element.querySelector<HTMLElement>(".placed-sticker")!;
+    return { ratio: box.width / box.height, left: item.style.left, top: item.style.top };
+  });
+  expect(mobile.ratio).toBeCloseTo(0.7, 1);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(page.locator(".companion-page")).toBeVisible();
+  const desktop = await journal.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const item = element.querySelector<HTMLElement>(".placed-sticker")!;
+    return { ratio: box.width / box.height, left: item.style.left, top: item.style.top };
+  });
+  expect(desktop.ratio).toBeCloseTo(0.7, 1);
+  expect(desktop.left).toBe(mobile.left);
+  expect(desktop.top).toBe(mobile.top);
+  await expect(sticker).toBeVisible();
 });
 
 test("undo, redo, page ordering and deletion work", async ({ page }) => {
