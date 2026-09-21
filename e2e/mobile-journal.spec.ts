@@ -104,18 +104,22 @@ test("mobile date and little joys remain readable without mood crowding", async 
   await expect(joys.locator(".joy-strike")).toHaveCount(0);
 });
 
-test("uploaded photos remain visible on the page after saving", async ({ page }) => {
+test("many large photos are processed sequentially and remain visible after saving", async ({ page }) => {
   await page.getByRole("button", { name: "Open My August Journal" }).click();
   await page.getByRole("button", { name: "Photos" }).click();
-  const svg = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="120" height="80"><rect width="120" height="80" fill="#d96f6f"/></svg>');
-  await page.locator('.tool-photos input[type="file"]').setInputFiles({ name: "memory.svg", mimeType: "image/svg+xml", buffer: svg });
-  const photo = page.locator(".journal-page .placed-photo img");
-  await expect(photo).toBeVisible();
-  await expect.poll(() => photo.evaluate(image => (image as HTMLImageElement).naturalWidth)).toBeGreaterThan(0);
+  const files = Array.from({ length: 12 }, (_, index) => ({
+    name: `memory-${index}.svg`,
+    mimeType: "image/svg+xml",
+    buffer: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="4000" height="3000"><rect width="4000" height="3000" fill="hsl(${index * 30} 55% 65%)"/></svg>`),
+  }));
+  await page.locator('.tool-photos input[type="file"]').setInputFiles(files);
+  const photos = page.locator(".journal-page .placed-photo img");
+  await expect(photos).toHaveCount(12, { timeout: 20_000 });
+  await expect.poll(() => photos.evaluateAll(images => images.every(image => (image as HTMLImageElement).naturalWidth > 0))).toBe(true);
   await page.getByRole("button", { name: /Save|Saved quietly/ }).click();
   await page.reload();
   await page.getByRole("button", { name: "Open My August Journal" }).click();
-  await expect(page.locator(".journal-page .placed-photo img")).toBeVisible();
+  await expect(page.locator(".journal-page .placed-photo img")).toHaveCount(12);
 });
 
 test("page geometry and decoration coordinates stay stable across mobile and desktop", async ({ page }) => {

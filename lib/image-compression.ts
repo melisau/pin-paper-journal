@@ -64,3 +64,14 @@ export function readFileAsDataUrl(file: File) {
     reader.readAsDataURL(file);
   });
 }
+
+/** Processes gallery selections one at a time to keep mobile peak memory bounded. */
+export async function processImageBatch<T>(files: Iterable<File>, process: (file: File, index: number) => Promise<T>) {
+  const results: T[] = [];
+  let index = 0;
+  for (const file of files) {
+    results.push(await process(file, index));
+    index += 1;
+  }
+  return results;
+}

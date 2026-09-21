@@ -56,6 +56,19 @@ describe("encrypted page sync", () => {
     expect(mocks.loadAsset.mock.calls.map(call => call[0])).toEqual(["photo-asset", "drawing-asset"]);
   });
 
+  it("keeps the page usable and marks an encrypted photo when its object is missing", async () => {
+    const page = makePage("14ca2633-3490-48b2-90f5-5d53a537a27e", "Still readable");
+    const encrypted_payload = await encryptJson({
+      ...page, id: undefined, photos: [{ id: 7, assetId: "missing", x: 0, y: 0, rotation: 0, framed: false, z: 1, size: 100, shape: "square" }], drawingData: undefined,
+    }, mocks.key!);
+    mocks.rows = [{ id: page.id, encrypted_payload, position: 0, updated_at: "2026-09-14T12:00:00.000Z" }];
+    mocks.loadAsset.mockRejectedValue(new Error("object not found"));
+
+    const loaded = await loadEncryptedPages({} as CryptoKey, "journal");
+    expect(loaded.pages[0].title).toBe("Still readable");
+    expect(loaded.pages[0].photos[0]).toMatchObject({ src: "", loadError: "object not found" });
+  });
+
   it("sends ordered encrypted records and removes pages absent from the batch through the RPC", async () => {
     const pages = [makePage(1, "Second"), makePage(2, "First")];
     const result = await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages });

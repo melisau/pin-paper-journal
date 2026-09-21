@@ -4,12 +4,32 @@ import { createClient } from "@/lib/supabase/client";
 const BUCKET = "encrypted-journal-assets";
 const pendingUploads = new Map<string, Promise<string>>();
 const knownUploads = new Map<string, string>();
+const managedObjectUrls = new Set<string>();
+const MAX_UPLOAD_ATTEMPTS = 3;
 
 type AssetMetadata = { iv: string; mimeType: string; name: string; version: 1 };
 type AssetRow = { id: string; storage_path: string; encrypted_metadata: EncryptedValue };
 
 function fail(error: { message: string } | null) {
   if (error) throw new Error(error.message);
+}
+
+function wait(delay: number) {
+  return new Promise(resolve => setTimeout(resolve, delay));
+}
+
+export async function retryAssetOperation<T>(operation: () => Promise<T>, attempts = MAX_UPLOAD_ATTEMPTS) {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      if (attempt === attempts) break;
+      await wait(250 * 2 ** (attempt - 1));
+    }
+  }
+  throw lastError;
 }
 
 async function performEncryptedUpload(options: {
@@ -60,7 +80,7 @@ export function uploadEncryptedAsset(options: {
   if (known) return Promise.resolve(known);
   const existing = pendingUploads.get(cacheKey);
   if (existing) return existing;
-  const upload = performEncryptedUpload(options)
+  const upload = retryAssetOperation(() => performEncryptedUpload(options))
     .then(id => { knownUploads.set(cacheKey, id); return id; })
     .finally(() => pendingUploads.delete(cacheKey));
   pendingUploads.set(cacheKey, upload);
@@ -83,7 +103,20 @@ export async function loadEncryptedAsset(assetId: string, journalKey: CryptoKey)
   fail(downloadError);
   if (!encryptedFile) throw new Error("The encrypted media item could not be downloaded.");
   const plaintext = await decryptBinary(await encryptedFile.arrayBuffer(), metadata.iv, journalKey);
-  return URL.createObjectURL(new Blob([plaintext], { type: metadata.mimeType }));
+  const objectUrl = URL.createObjectURL(new Blob([plaintext], { type: metadata.mimeType }));
+  managedObjectUrls.add(objectUrl);
+  return objectUrl;
+}
+
+export function revokeEncryptedAssetUrl(source?: string) {
+  if (!source?.startsWith("blob:") || !managedObjectUrls.has(source)) return;
+  URL.revokeObjectURL(source);
+  managedObjectUrls.delete(source);
+}
+
+export function revokeAllEncryptedAssetUrls() {
+  for (const source of managedObjectUrls) URL.revokeObjectURL(source);
+  managedObjectUrls.clear();
 }
 
 export async function cleanupUnreferencedAssets(journalId: string, referencedIds: Set<string>) {

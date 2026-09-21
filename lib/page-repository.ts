@@ -5,7 +5,7 @@ import type { PageData } from "@/lib/journal-model";
 import { createClient } from "@/lib/supabase/client";
 
 type PageRow = { id: string; encrypted_payload: EncryptedValue; position: number; updated_at: string };
-type PersistedPhoto = Omit<PageData["photos"][number], "src"> & { src?: never };
+type PersistedPhoto = Omit<PageData["photos"][number], "src" | "loadError"> & { src?: never; loadError?: never };
 type PersistedPage = Omit<PageData, "id" | "photos" | "drawingData"> & {
   photos: PersistedPhoto[];
   drawingAssetId?: string;
@@ -29,20 +29,48 @@ export async function loadEncryptedPages(masterKey: CryptoKey, journalId: string
   fail(error);
   const rows = (data ?? []) as PageRow[];
 
-  const pages = await Promise.all(rows.map(async row => {
+  // Decrypt and open assets sequentially. Mobile browsers can terminate a tab when
+  // several large encrypted blobs are downloaded and decoded at the same time.
+  const pages: PageData[] = [];
+  for (const row of rows) {
     const payload = await decryptJson<PersistedPage>(row.encrypted_payload, journalKey);
-    const photos = await Promise.all((payload.photos ?? []).map(async photo => ({
-      ...photo,
-      src: photo.assetId ? await loadEncryptedAsset(photo.assetId, journalKey) : "",
-    })));
-    const drawingData = payload.drawingAssetId ? await loadEncryptedAsset(payload.drawingAssetId, journalKey) : "";
-    return { ...payload, id: row.id, photos, drawingData } satisfies PageData;
-  }));
+    const photos: PageData["photos"] = [];
+    for (const photo of payload.photos ?? []) {
+      if (!photo.assetId) {
+        photos.push({ ...photo, src: "", loadError: "This photo has no encrypted asset reference." });
+        continue;
+      }
+      try {
+        photos.push({ ...photo, src: await loadEncryptedAsset(photo.assetId, journalKey), loadError: undefined });
+      } catch (error) {
+        photos.push({ ...photo, src: "", loadError: error instanceof Error ? error.message : "This photo could not be opened." });
+      }
+    }
+    let drawingData = "";
+    if (payload.drawingAssetId) {
+      try { drawingData = await loadEncryptedAsset(payload.drawingAssetId, journalKey); } catch { /* A missing drawing must not block the page. */ }
+    }
+    pages.push({ ...payload, id: row.id, photos, drawingData } satisfies PageData);
+  }
   return { pages, updatedAt: rows.reduce((latest, row) => row.updated_at > latest ? row.updated_at : latest, "") };
 }
 
 export async function reloadEncryptedAsset(masterKey: CryptoKey, journalId: string, assetId: string) {
   return loadEncryptedAsset(assetId, await getEncryptedJournalKey(masterKey, journalId));
+}
+
+export async function repairEncryptedPhotos(masterKey: CryptoKey, journalId: string, photos: PageData["photos"]) {
+  const journalKey = await getEncryptedJournalKey(masterKey, journalId);
+  const repaired = [] as PageData["photos"];
+  for (const photo of photos) {
+    if (!photo.assetId || (photo.src && !photo.loadError)) { repaired.push(photo); continue; }
+    try {
+      repaired.push({ ...photo, src: await loadEncryptedAsset(photo.assetId, journalKey), loadError: undefined });
+    } catch (error) {
+      repaired.push({ ...photo, src: "", loadError: error instanceof Error ? error.message : "This photo could not be reopened." });
+    }
+  }
+  return repaired;
 }
 
 export async function syncEncryptedPages(options: {
@@ -88,6 +116,9 @@ export async function syncEncryptedPages(options: {
       joys: runtimePage.joys,
       joysVisible: runtimePage.joysVisible,
       joyPosition: runtimePage.joyPosition,
+      template: runtimePage.template,
+      trackerChecks: runtimePage.trackerChecks,
+      freeTexts: runtimePage.freeTexts,
       pattern: runtimePage.pattern,
       paperColor: runtimePage.paperColor,
       font: runtimePage.font,
