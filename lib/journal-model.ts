@@ -5,6 +5,8 @@ export type Photo = { id: number; src: string; assetId?: string; loadError?: str
 export type Joy = { id: number; text: string; done: boolean };
 export type FreeText = { id: number; text: string; x: number; y: number; rotation: number; size: number; z: number };
 export type JournalTemplate = "free" | "habit" | "mood" | "weekly" | "todo";
+export type TodoItem = { id: number; text: string; done: boolean };
+export type MoodEntry = { marker: string; color: string };
 export type PageData = {
   id: PageId;
   pageName: string;
@@ -22,7 +24,10 @@ export type PageData = {
   joyColor?: string;
   joyTextColor?: string;
   template?: JournalTemplate;
+  templateTitle?: string;
   trackerChecks?: boolean[];
+  todoItems?: TodoItem[];
+  moodEntries?: MoodEntry[];
   templateLayout?: { x: number; y: number; width: number; height: number };
   freeTexts?: FreeText[];
   pattern: string;
