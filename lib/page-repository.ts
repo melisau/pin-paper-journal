@@ -29,30 +29,36 @@ export async function loadEncryptedPages(masterKey: CryptoKey, journalId: string
   fail(error);
   const rows = (data ?? []) as PageRow[];
 
-  // Decrypt and open assets sequentially. Mobile browsers can terminate a tab when
-  // several large encrypted blobs are downloaded and decoded at the same time.
   const pages: PageData[] = [];
   for (const row of rows) {
     const payload = await decryptJson<PersistedPage>(row.encrypted_payload, journalKey);
-    const photos: PageData["photos"] = [];
-    for (const photo of payload.photos ?? []) {
-      if (!photo.assetId) {
-        photos.push({ ...photo, src: "", loadError: "This photo has no encrypted asset reference." });
-        continue;
-      }
-      try {
-        photos.push({ ...photo, src: await loadEncryptedAsset(photo.assetId, journalKey), loadError: undefined });
-      } catch (error) {
-        photos.push({ ...photo, src: "", loadError: error instanceof Error ? error.message : "This photo could not be opened." });
-      }
-    }
-    let drawingData = "";
-    if (payload.drawingAssetId) {
-      try { drawingData = await loadEncryptedAsset(payload.drawingAssetId, journalKey); } catch { /* A missing drawing must not block the page. */ }
-    }
-    pages.push({ ...payload, id: row.id, photos, drawingData } satisfies PageData);
+    const photos = (payload.photos ?? []).map(photo => ({
+      ...photo,
+      src: "",
+      loadError: photo.assetId ? undefined : "This photo has no encrypted asset reference.",
+    }));
+    pages.push({ ...payload, id: row.id, photos, drawingData: "" } satisfies PageData);
   }
   return { pages, updatedAt: rows.reduce((latest, row) => row.updated_at > latest ? row.updated_at : latest, "") };
+}
+
+/** Opens only one page's media. Call this for the visible page(s), not the whole journal. */
+export async function loadEncryptedPageMedia(masterKey: CryptoKey, journalId: string, page: PageData) {
+  const journalKey = await getEncryptedJournalKey(masterKey, journalId);
+  const photos = [] as PageData["photos"];
+  for (const photo of page.photos ?? []) {
+    if (photo.src || !photo.assetId) { photos.push(photo); continue; }
+    try {
+      photos.push({ ...photo, src: await loadEncryptedAsset(photo.assetId, journalKey), loadError: undefined });
+    } catch (error) {
+      photos.push({ ...photo, src: "", loadError: error instanceof Error ? error.message : "This photo could not be opened." });
+    }
+  }
+  let drawingData = page.drawingData;
+  if (!drawingData && page.drawingAssetId) {
+    try { drawingData = await loadEncryptedAsset(page.drawingAssetId, journalKey); } catch { /* Keep the rest of the page usable. */ }
+  }
+  return { ...page, photos, drawingData } satisfies PageData;
 }
 
 export async function reloadEncryptedAsset(masterKey: CryptoKey, journalId: string, assetId: string) {

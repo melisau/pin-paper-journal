@@ -1,7 +1,7 @@
 import { createEncryptedJournal } from "@/lib/journal-repository";
 import type { Book, PageData } from "@/lib/journal-model";
-import type { JournalBackup } from "@/lib/local-backup";
-import { loadEncryptedPages, syncEncryptedPages } from "@/lib/page-repository";
+import type { EncryptedJournalBackup, JournalBackup } from "@/lib/local-backup";
+import { loadEncryptedPageMedia, loadEncryptedPages, syncEncryptedPages } from "@/lib/page-repository";
 
 async function sourceToDataUrl(source: string) {
   if (!source || source.startsWith("data:")) return source;
@@ -25,12 +25,14 @@ export async function makeCloudBackup(books: Book[], masterKey: CryptoKey): Prom
   const journals: Record<string, unknown> = {};
   for (const book of books) {
     const loaded = await loadEncryptedPages(masterKey, book.id);
-    journals[book.id] = { version: 1, pages: await Promise.all(loaded.pages.map(portablePage)), theme: "Blush", updatedAt: loaded.updatedAt };
+    const openedPages = [] as PageData[];
+    for (const page of loaded.pages) openedPages.push(await loadEncryptedPageMedia(masterKey, book.id, page));
+    journals[book.id] = { version: 1, pages: await Promise.all(openedPages.map(portablePage)), theme: "Blush", updatedAt: loaded.updatedAt };
   }
   return { app: "pin-paper-journal", version: 1, exportedAt: new Date().toISOString(), books, journals };
 }
 
-export function downloadBackupFile(backup: JournalBackup) {
+export function downloadBackupFile(backup: JournalBackup | EncryptedJournalBackup) {
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");

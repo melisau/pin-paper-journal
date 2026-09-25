@@ -3,7 +3,7 @@ import { containSize, processImageBatch } from "@/lib/image-compression";
 
 describe("containSize", () => {
   it("shrinks a landscape image without changing its aspect ratio", () => {
-    expect(containSize(4000, 2000, 1800)).toEqual({ width: 1800, height: 900 });
+    expect(containSize(4000, 2000, 1600)).toEqual({ width: 1600, height: 800 });
   });
 
   it("does not enlarge a small image", () => {

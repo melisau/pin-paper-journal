@@ -19,7 +19,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({
   from: () => ({ select: () => ({ eq: () => ({ order: async () => ({ data: mocks.rows, error: null }) }) }) }),
 }) }));
 
-import { loadEncryptedPages, syncEncryptedPages } from "@/lib/page-repository";
+import { loadEncryptedPageMedia, loadEncryptedPages, syncEncryptedPages } from "@/lib/page-repository";
 
 const makePage = (id: string | number, title: string): PageData => ({
   id, pageName: title, pageDate: "", title, note: `${title} secret`, placed: [], photos: [], drawingData: "", joys: [], joysVisible: true,
@@ -41,7 +41,7 @@ describe("encrypted page sync", () => {
     mocks.rows = [];
   });
 
-  it("loads pages in database order and decrypts their photo and drawing references", async () => {
+  it("loads page metadata first and opens media only for a requested visible page", async () => {
     const first = makePage("14ca2633-3490-48b2-90f5-5d53a537a27e", "Loaded");
     const encrypted_payload = await encryptJson({
       ...first, id: undefined, photos: [{ id: 1, assetId: "photo-asset", x: 0, y: 0, rotation: 0, framed: false, z: 1, size: 100, shape: "square" }],
@@ -52,7 +52,10 @@ describe("encrypted page sync", () => {
 
     const loaded = await loadEncryptedPages({} as CryptoKey, "journal");
     expect(loaded.updatedAt).toBe("2026-09-14T12:00:00.000Z");
-    expect(loaded.pages[0]).toMatchObject({ id: first.id, title: "Loaded", drawingData: "blob:drawing", photos: [{ assetId: "photo-asset", src: "blob:photo" }] });
+    expect(loaded.pages[0]).toMatchObject({ id: first.id, title: "Loaded", drawingData: "", photos: [{ assetId: "photo-asset", src: "" }] });
+    expect(mocks.loadAsset).not.toHaveBeenCalled();
+    const opened = await loadEncryptedPageMedia({} as CryptoKey, "journal", loaded.pages[0]);
+    expect(opened).toMatchObject({ drawingData: "blob:drawing", photos: [{ src: "blob:photo" }] });
     expect(mocks.loadAsset.mock.calls.map(call => call[0])).toEqual(["photo-asset", "drawing-asset"]);
   });
 
@@ -65,8 +68,9 @@ describe("encrypted page sync", () => {
     mocks.loadAsset.mockRejectedValue(new Error("object not found"));
 
     const loaded = await loadEncryptedPages({} as CryptoKey, "journal");
+    const opened = await loadEncryptedPageMedia({} as CryptoKey, "journal", loaded.pages[0]);
     expect(loaded.pages[0].title).toBe("Still readable");
-    expect(loaded.pages[0].photos[0]).toMatchObject({ src: "", loadError: "object not found" });
+    expect(opened.photos[0]).toMatchObject({ src: "", loadError: "object not found" });
   });
 
   it("sends ordered encrypted records and removes pages absent from the batch through the RPC", async () => {

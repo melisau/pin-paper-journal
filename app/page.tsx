@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { BookOpen, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createAccountKeyBundle, unwrapKey, type WrappedKey } from "@/lib/crypto";
-import { restoreAccountMasterKey, setAccountMasterKey } from "@/lib/key-vault";
+import { isHighSecurityMode, restoreAccountMasterKey, setAccountMasterKey, setHighSecurityMode } from "@/lib/key-vault";
 
 const wrappedKeyCacheKey = (userId: string) => `pin-paper-wrapped-key:${userId}`;
 
@@ -18,9 +18,11 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
   const [needsRecovery, setNeedsRecovery] = useState(false);
+  const [highSecurity, setHighSecurity] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
+    queueMicrotask(() => { if (!cancelled) setHighSecurity(isHighSecurityMode()); });
     void createClient().auth.getSession().then(async ({ data }) => {
       const userId = data.session?.user.id;
       if (userId && await restoreAccountMasterKey(userId) && !cancelled) router.replace("/journal");
@@ -48,7 +50,7 @@ export default function AuthPage() {
     if (cached) {
       try {
         const wrapped = JSON.parse(cached) as WrappedKey;
-        await setAccountMasterKey(await unwrapKey(wrapped, password), userId);
+        await setAccountMasterKey(await unwrapKey(wrapped, password), userId, !highSecurity);
         return false;
       } catch {
         localStorage.removeItem(wrappedKeyCacheKey(userId));
@@ -59,7 +61,7 @@ export default function AuthPage() {
     if (readError) throw new Error(readError.message);
     if (data) {
       const wrapped = data.wrapped_by_password as WrappedKey;
-      await setAccountMasterKey(await unwrapKey(wrapped, password), userId);
+      await setAccountMasterKey(await unwrapKey(wrapped, password), userId, !highSecurity);
       localStorage.setItem(wrappedKeyCacheKey(userId), JSON.stringify(wrapped));
       return false;
     }
@@ -70,7 +72,7 @@ export default function AuthPage() {
       wrapped_by_recovery: bundle.wrappedByRecovery,
     });
     if (error) throw new Error(error.message);
-    await setAccountMasterKey(bundle.masterKey, userId);
+    await setAccountMasterKey(bundle.masterKey, userId, !highSecurity);
     localStorage.setItem(wrappedKeyCacheKey(userId), JSON.stringify(bundle.wrappedByPassword));
     setRecoveryCode(bundle.recoveryCode);
     return true;
@@ -136,6 +138,7 @@ export default function AuthPage() {
       <form onSubmit={submit}>
         <label><span><Mail /> Email</span><input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></label>
         <label><span><LockKeyhole /> Password</span><input type="password" minLength={10} autoComplete={mode === "signin" ? "current-password" : "new-password"} required value={password} onChange={e => setPassword(e.target.value)} /></label>
+        <label className="security-mode"><input type="checkbox" checked={highSecurity} onChange={e => { const enabled=e.target.checked;setHighSecurity(enabled);void setHighSecurityMode(enabled); }}/><span>High security — keep the journal key only in memory</span></label>
         <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "signin" ? "Open my journals" : "Create account"}</button>
       </form>
       {message && <p className="auth-message" role="status">{message}</p>}

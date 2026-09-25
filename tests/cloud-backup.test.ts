@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { PageData } from "@/lib/journal-model";
 
-const mocks = vi.hoisted(() => ({ load: vi.fn(), sync: vi.fn(), create: vi.fn() }));
-vi.mock("@/lib/page-repository", () => ({ loadEncryptedPages: mocks.load, syncEncryptedPages: mocks.sync }));
+const mocks = vi.hoisted(() => ({ load: vi.fn(), loadMedia: vi.fn(), sync: vi.fn(), create: vi.fn() }));
+vi.mock("@/lib/page-repository", () => ({ loadEncryptedPages: mocks.load, loadEncryptedPageMedia: mocks.loadMedia, syncEncryptedPages: mocks.sync }));
 vi.mock("@/lib/journal-repository", () => ({ createEncryptedJournal: mocks.create }));
 
 import { importCloudBackup, makeCloudBackup } from "@/lib/cloud-backup";
@@ -14,7 +14,7 @@ const page: PageData = {
 const book = { id: "old-journal", title: "Journal", tone: "sage", label: "notes" };
 
 describe("cloud backups", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); mocks.loadMedia.mockImplementation(async (_key: CryptoKey, _journalId: string, value: PageData) => value); });
 
   it("exports decrypted page data in the validated backup format", async () => {
     mocks.load.mockResolvedValue({ pages: [page], updatedAt: "2026-09-14T10:00:00.000Z" });

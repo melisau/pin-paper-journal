@@ -1,4 +1,5 @@
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+export const MAX_COMPRESSED_IMAGE_BYTES = 2 * 1024 * 1024;
 
 export function containSize(width: number, height: number, maxDimension: number) {
   if (width <= 0 || height <= 0 || maxDimension <= 0) throw new Error("Invalid image dimensions");
@@ -37,7 +38,7 @@ async function decodeImage(file: File): Promise<DecodedImage> {
   }
 }
 
-export async function compressImage(file: File, maxDimension = 1800, quality = 0.82) {
+export async function compressImage(file: File, maxDimension = 1600, quality = 0.78) {
   if (!file.type.startsWith("image/")) throw new Error("Only image files are supported.");
   if (file.size > MAX_IMAGE_BYTES) throw new Error("Images must be 10 MB or smaller.");
   const decoded = await decodeImage(file);
@@ -50,6 +51,7 @@ export async function compressImage(file: File, maxDimension = 1800, quality = 0
     if (!context) throw new Error("Image processing is unavailable in this browser.");
     context.drawImage(decoded.source, 0, 0, size.width, size.height);
     const blob = await canvasToBlob(canvas, "image/webp", quality);
+    if (blob.size > MAX_COMPRESSED_IMAGE_BYTES) throw new Error("This photo is still larger than 2 MB after compression. Choose a smaller image.");
     return new File([blob], `${file.name.replace(/\.[^.]+$/, "") || "journal-photo"}.webp`, { type: "image/webp" });
   } finally {
     decoded.close();

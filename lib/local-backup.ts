@@ -1,4 +1,5 @@
 import type { Book } from "@/lib/journal-model";
+import { decryptJson, encryptJson, generateEncryptionKey, unwrapKey, wrapKey, type EncryptedValue, type WrappedKey } from "@/lib/crypto";
 
 export type JournalBackup = {
   app: "pin-paper-journal";
@@ -7,6 +8,36 @@ export type JournalBackup = {
   books: Book[];
   journals: Record<string, unknown>;
 };
+
+export type EncryptedJournalBackup = {
+  app: "pin-paper-journal";
+  version: 2;
+  protected: true;
+  wrappedKey: WrappedKey;
+  payload: EncryptedValue;
+};
+
+export async function encryptBackup(backup: JournalBackup, password: string): Promise<EncryptedJournalBackup> {
+  if (password.length < 10) throw new Error("Use at least 10 characters for the backup password.");
+  const key = await generateEncryptionKey();
+  return { app: "pin-paper-journal", version: 2, protected: true, wrappedKey: await wrapKey(key, password), payload: await encryptJson(backup, key) };
+}
+
+export async function decryptBackup(raw: string, password: string) {
+  const value = JSON.parse(raw) as Partial<EncryptedJournalBackup>;
+  if (value.app !== "pin-paper-journal" || value.version !== 2 || value.protected !== true || !value.wrappedKey || !value.payload) {
+    return parseBackup(raw);
+  }
+  try {
+    return parseBackup(JSON.stringify(await decryptJson<JournalBackup>(value.payload, await unwrapKey(value.wrappedKey, password))));
+  } catch {
+    throw new Error("The backup password is incorrect or the file is damaged.");
+  }
+}
+
+export function isEncryptedBackup(raw: string) {
+  try { const value=JSON.parse(raw) as Partial<EncryptedJournalBackup>;return value.app==="pin-paper-journal"&&value.version===2&&value.protected===true; } catch { return false; }
+}
 
 function isBook(value: unknown): value is Book {
   if (!value || typeof value !== "object") return false;
