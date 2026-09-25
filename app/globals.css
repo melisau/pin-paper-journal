@@ -387,3 +387,19 @@
  background:transparent!important;
  backdrop-filter:none!important;
 }
+
+/* Keep the expanded sticker catalog orderly inside the narrow creative drawer. */
+.tool-stickers .sticker-catalog{min-width:0;max-width:100%;overflow:hidden}
+.tool-stickers .catalog-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;overflow:visible;padding:0}
+.tool-stickers .catalog-tabs button{min-width:0;overflow:hidden;text-overflow:ellipsis;padding-inline:5px}
+.tool-stickers .catalog-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;max-height:190px;overflow-x:hidden;overflow-y:auto;padding:2px;scrollbar-width:thin;align-content:start}
+.tool-stickers .catalog-grid button{box-sizing:border-box;width:100%;height:64px;min-height:64px;aspect-ratio:auto;overflow:hidden;padding:4px 3px}
+.tool-stickers .catalog-grid button span{display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:22px}
+.tool-stickers .catalog-grid button small{display:block;width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tool-stickers .catalog-grid.category-quotes{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+.tool-stickers .catalog-grid.category-quotes button{height:74px}
+.tool-stickers .catalog-grid.category-quotes button span{display:-webkit-box;white-space:normal;overflow-wrap:anywhere;-webkit-box-orient:vertical;-webkit-line-clamp:3;font-size:15px;line-height:1.05}
+.tool-stickers .washi-grid{grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+.tool-stickers .washi-swatch{min-width:0;width:100%}
+.placed-sticker.category-quotes{box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.25!important}
+@media(max-width:650px){.tool-stickers .catalog-grid{max-height:160px}.tool-stickers .catalog-grid button{height:58px;min-height:58px}.tool-stickers .catalog-grid.category-quotes button{height:68px}}
