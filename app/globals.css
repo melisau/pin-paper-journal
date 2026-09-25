@@ -370,3 +370,15 @@
 .companion-page.paper-retro::after{
  display:none!important;
 }
+
+/* The Writing style colour controls all user-authored page text. */
+.book-spread .journal-page:not(.paper-dark) .page-identity input,
+.book-spread .companion-page:not(.paper-dark) .saved-identity em,
+.book-spread .journal-page:not(.paper-dark) .date-row,
+.book-spread .companion-page:not(.paper-dark) .date-row,
+.book-spread .journal-page:not(.paper-dark) .journal-title,
+.book-spread .companion-page:not(.paper-dark) .saved-title,
+.book-spread .journal-page:not(.paper-dark) .writing-area textarea,
+.book-spread .companion-page:not(.paper-dark) .saved-note{
+ color:var(--page-text-color,#66564b)!important;
+}
