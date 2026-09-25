@@ -353,11 +353,17 @@
 }
 .book-spread .paper-retro.side-left{
  background-position:left center!important;
- box-shadow:inset -15px 0 22px #3f241b73!important;
+ box-shadow:none!important;
 }
 .book-spread .paper-retro.side-right{
  background-position:right center!important;
- box-shadow:inset 15px 0 22px #3f241b73!important;
+ box-shadow:none!important;
+}
+.book-spread:has(.paper-retro){
+ filter:none!important;
+}
+.book-spread:has(.paper-retro)::after{
+ display:none!important;
 }
 .journal-page.paper-retro::after,
 .companion-page.paper-retro::after{
