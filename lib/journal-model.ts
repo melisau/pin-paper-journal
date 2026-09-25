@@ -26,6 +26,7 @@ export type PageData = {
   template?: JournalTemplate;
   templateTitle?: string;
   templateBackground?: boolean;
+  templateBorderColor?: string;
   trackerChecks?: boolean[];
   todoItems?: TodoItem[];
   moodEntries?: MoodEntry[];

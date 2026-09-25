@@ -403,3 +403,21 @@
 .tool-stickers .washi-swatch{min-width:0;width:100%}
 .placed-sticker.category-quotes{box-sizing:border-box;white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.25!important}
 @media(max-width:650px){.tool-stickers .catalog-grid{max-height:160px}.tool-stickers .catalog-grid button{height:58px;min-height:58px}.tool-stickers .catalog-grid.category-quotes button{height:68px}}
+
+/* User-selected tracker borders and additional washi designs. */
+.journal-template{border-color:var(--template-border,#cdbfb1)}
+.journal-template.template-transparent{border-color:var(--template-border,#cdbfb1)}
+.journal-template .template-heading input,
+.journal-template .tracker-grid button,
+.journal-template .weekly-columns label,
+.journal-template .todo-list>div,
+.journal-template .todo-list .todo-add,
+.journal-template .mood-days button{border-color:var(--template-border,#cdbfb1)}
+.washi-swatch.lavender,.kind-tape.tape-lavender{background-color:#d8cde4;background-image:linear-gradient(90deg,#a997bf55 1px,transparent 1px),linear-gradient(#a997bf55 1px,transparent 1px);background-size:10px 10px}
+.washi-swatch.rosegrid,.kind-tape.tape-rosegrid{background:repeating-linear-gradient(0deg,#efd0cf 0 7px,#c8909055 7px 8px),repeating-linear-gradient(90deg,transparent 0 7px,#b77f7f55 7px 8px)}
+.washi-swatch.night,.kind-tape.tape-night{background-color:#62647c;background-image:radial-gradient(#f5e9b8 1.2px,transparent 1.8px);background-size:11px 11px}
+.washi-swatch.kraftdots,.kind-tape.tape-kraftdots{background-color:#d0ad7d;background-image:radial-gradient(#876846 2px,transparent 2.5px);background-size:12px 12px}
+.washi-swatch.mint,.kind-tape.tape-mint{background:repeating-linear-gradient(135deg,#b8d5c8 0 8px,#e2eee6 8px 14px,#8fb6a7 14px 16px)}
+.washi-swatch.newsprint,.kind-tape.tape-newsprint{background-color:#d9ccb8;background-image:repeating-linear-gradient(0deg,transparent 0 4px,#6d62534f 4px 5px);background-size:100% 9px}
+.book-spread .journal-page:not(.paper-dark) .writing-area textarea::placeholder{color:#111!important;opacity:1}
+.book-spread .journal-page.paper-dark .writing-area textarea::placeholder{color:#fffaf0!important;opacity:.72}

@@ -33,6 +33,9 @@ const TAPES: CatalogSticker[] = [
   { value: "stripe", label: "Kraft stripe", category: "Washi", kind: "tape" }, { value: "floral", label: "Tiny florals", category: "Washi", kind: "tape" },
   { value: "blush", label: "Blush gingham", category: "Washi", kind: "tape" }, { value: "sage", label: "Sage grid", category: "Washi", kind: "tape" },
   { value: "sky", label: "Powder blue", category: "Washi", kind: "tape" }, { value: "sun", label: "Butter stripe", category: "Washi", kind: "tape" },
+  { value: "lavender", label: "Lavender plaid", category: "Washi", kind: "tape" }, { value: "rosegrid", label: "Rose check", category: "Washi", kind: "tape" },
+  { value: "night", label: "Night stars", category: "Washi", kind: "tape" }, { value: "kraftdots", label: "Kraft dots", category: "Washi", kind: "tape" },
+  { value: "mint", label: "Mint lines", category: "Washi", kind: "tape" }, { value: "newsprint", label: "Vintage print", category: "Washi", kind: "tape" },
 ];
 
 export function StickerCatalog({ onAdd }: { onAdd: (item: CatalogSticker) => void }) {

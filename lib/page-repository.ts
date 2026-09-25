@@ -122,6 +122,7 @@ export async function syncEncryptedPages(options: {
       template: runtimePage.template,
       templateTitle: runtimePage.templateTitle,
       templateBackground: runtimePage.templateBackground,
+      templateBorderColor: runtimePage.templateBorderColor,
       trackerChecks: runtimePage.trackerChecks,
       todoItems: runtimePage.todoItems,
       moodEntries: runtimePage.moodEntries,

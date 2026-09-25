@@ -18,4 +18,11 @@ describe("StickerCatalog", () => {
     fireEvent.click(screen.getByTitle(/Mushroom/));
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ value: "🍄", category: "Botanical" }));
   });
+
+  it("offers twelve distinct washi tapes", () => {
+    render(<StickerCatalog onAdd={vi.fn()}/>);
+    expect(screen.getByRole("button", { name: "Lavender plaid" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Vintage print" })).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /Kraft stripe|Tiny florals|Blush gingham|Sage grid|Powder blue|Butter stripe|Lavender plaid|Rose check|Night stars|Kraft dots|Mint lines|Vintage print/ })).toHaveLength(12);
+  });
 });

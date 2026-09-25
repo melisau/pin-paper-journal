@@ -45,7 +45,9 @@ describe("JournalTemplateLayer", () => {
   });
 
   it("can render without a template card background", () => {
-    render(<JournalTemplateLayer template="habit" backgroundVisible={false}/>);
-    expect(screen.getByRole("region", { name: "Habit tracker" })).toHaveClass("template-transparent");
+    render(<JournalTemplateLayer template="habit" backgroundVisible={false} borderColor="#c86478"/>);
+    const tracker = screen.getByRole("region", { name: "Habit tracker" });
+    expect(tracker).toHaveClass("template-transparent");
+    expect(tracker).toHaveStyle({ "--template-border": "#c86478" });
   });
 });
