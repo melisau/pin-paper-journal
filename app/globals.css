@@ -183,6 +183,7 @@
  .desk-screen .toolbox[data-tool=""] .tool-rail{pointer-events:auto}
 }
 
+
 /* The page is one responsive canvas. Its internal composition never reflows;
    only the complete 7:10 page scales between a two-page spread and one page. */
 .book-spread .content-grid{display:block!important}
@@ -338,4 +339,27 @@
  .page-finder .mobile-page-actions button{display:flex;align-items:center;justify-content:center;gap:4px;min-height:36px;min-width:0;padding:6px;font-size:10px;scroll-snap-align:none;flex:initial}
  .page-finder .mobile-page-actions button:disabled{opacity:.4}
  .page-finder .mobile-page-actions svg{width:14px}
+}
+
+/* Final kraft override: map the two halves of the supplied book artwork to the spread. */
+.journal-page.paper-retro,
+.companion-page.paper-retro{
+ background-color:#d8aa73!important;
+ background-image:url("/aged-parchment-book.png")!important;
+ background-repeat:no-repeat!important;
+ background-size:200% 100%!important;
+ background-blend-mode:normal!important;
+ border-color:#704521!important;
+}
+.book-spread .paper-retro.side-left{
+ background-position:left center!important;
+ box-shadow:inset -15px 0 22px #3f241b73!important;
+}
+.book-spread .paper-retro.side-right{
+ background-position:right center!important;
+ box-shadow:inset 15px 0 22px #3f241b73!important;
+}
+.journal-page.paper-retro::after,
+.companion-page.paper-retro::after{
+ display:none!important;
 }
