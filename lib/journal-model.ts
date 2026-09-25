@@ -1,6 +1,6 @@
 export type Book = { id: string; title: string; tone: string; label: string };
 export type PageId = string | number;
-export type Sticker = { id: number; value: string; x: number; y: number; rotation: number; size?: number; z?: number; kind?: "sticker" | "tape"; category?: string };
+export type Sticker = { id: number; value: string; x: number; y: number; rotation: number; size?: number; z?: number; opacity?: number; kind?: "sticker" | "tape"; category?: string };
 export type Photo = { id: number; src: string; assetId?: string; loadError?: string; x: number; y: number; rotation: number; framed: boolean; z: number; size: number; shape: "square" | "round" | "soft" | "wavy" };
 export type Joy = { id: number; text: string; done: boolean };
 export type FreeText = { id: number; text: string; x: number; y: number; rotation: number; size: number; z: number };
@@ -18,8 +18,12 @@ export type PageData = {
   joys: Joy[];
   joysVisible: boolean;
   joyPosition?: { x: number; y: number };
+  joyTitle?: string;
+  joyColor?: string;
+  joyTextColor?: string;
   template?: JournalTemplate;
   trackerChecks?: boolean[];
+  templateLayout?: { x: number; y: number; width: number; height: number };
   freeTexts?: FreeText[];
   pattern: string;
   paperColor: string;
