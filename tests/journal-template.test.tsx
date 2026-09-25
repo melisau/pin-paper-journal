@@ -32,4 +32,20 @@ describe("JournalTemplateLayer", () => {
     expect(screen.getByRole("button", { name: "Mood tracker day 31" })).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /Mood tracker day/ })).toHaveLength(31);
   });
+
+  it("accepts short weekly notes instead of check marks", () => {
+    function Example() {
+      const [notes, setNotes] = useState<string[]>([]);
+      return <JournalTemplateLayer template="weekly" weeklyNotes={notes} onWeeklyChange={(index, note) => setNotes(current => { const next = [...current]; next[index] = note; return next; })}/>;
+    }
+    render(<Example/>);
+    fireEvent.change(screen.getByLabelText("Mon note"), { target: { value: "Dentist at 10" } });
+    expect(screen.getByLabelText("Mon note")).toHaveValue("Dentist at 10");
+    expect(screen.queryByText("planned ✓")).not.toBeInTheDocument();
+  });
+
+  it("can render without a template card background", () => {
+    render(<JournalTemplateLayer template="habit" backgroundVisible={false}/>);
+    expect(screen.getByRole("region", { name: "Habit tracker" })).toHaveClass("template-transparent");
+  });
 });

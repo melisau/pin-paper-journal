@@ -25,9 +25,11 @@ export type PageData = {
   joyTextColor?: string;
   template?: JournalTemplate;
   templateTitle?: string;
+  templateBackground?: boolean;
   trackerChecks?: boolean[];
   todoItems?: TodoItem[];
   moodEntries?: MoodEntry[];
+  weeklyNotes?: string[];
   templateLayout?: { x: number; y: number; width: number; height: number };
   freeTexts?: FreeText[];
   pattern: string;
