@@ -170,6 +170,17 @@ test("desktop leaves share one proportional template", async ({ page }) => {
     expect(layout.left[key].height).toBeCloseTo(layout.right[key].height, 2);
   }
   await expect(page.locator(".companion-number")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Paper" }).click();
+  await page.getByRole("button", { name: "All pages" }).click();
+  await page.getByRole("button", { name: "Midnight black paper" }).click();
+  await expect(page.locator(".journal-page")).toHaveClass(/paper-dark/);
+  await expect(page.locator(".companion-page")).toHaveClass(/paper-dark/);
+  await page.locator(".tool-paper select").selectOption("retro");
+  await expect(page.locator(".journal-page")).toHaveClass(/paper-retro/);
+  await page.getByRole("button", { name: "Write" }).click();
+  await page.locator(".tool-write select").selectOption("ink");
+  await expect(page.locator(".journal-page .writing-area")).toHaveClass(/font-ink/);
 });
 
 test("undo, redo, page ordering and deletion work", async ({ page }) => {
