@@ -344,12 +344,12 @@
 /* Final kraft override: map the two halves of the supplied book artwork to the spread. */
 .journal-page.paper-retro,
 .companion-page.paper-retro{
- background-color:#d8aa73!important;
+ background-color:transparent!important;
  background-image:url("/aged-parchment-book.png")!important;
  background-repeat:no-repeat!important;
  background-size:200% 100%!important;
  background-blend-mode:normal!important;
- border-color:#704521!important;
+ border-color:transparent!important;
 }
 .book-spread .paper-retro.side-left{
  background-position:left center!important;
