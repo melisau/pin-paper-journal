@@ -13,7 +13,7 @@ Durumlar: **Geçti** = yerel test veya doğrudan kod kanıtı; **Kısmi** = yere
 | 1 | Production build | Geçti | `npm run build` tamamlandı. |
 | 2 | TypeScript | Geçti | Production build TypeScript aşamasını tamamladı. |
 | 3 | Lint | Geçti | `npm run lint` hata vermedi. |
-| 4 | Birim testleri | Geçti | `npm test`: 24 dosyada 74/74. |
+| 4 | Birim testleri | Geçti | `npm test`: 25 dosyada 92/92; kayıtlı oturum ve sunucu doğrulama hatalarının yönlendirme döngüsü oluşturmaması da test ediliyor. |
 | 5 | Migration sırası ve temel güvenlik denetimi | Geçti | `npm run migration:check`: 3 sıralı migration. Canlı veritabanına uygulanmış olmaları ayrıca doğrulanmalı. |
 | 6 | CI kalite kapısı | Kısmi | `.github/workflows/ci.yml` lint, test, build, migration ve mobil E2E içeriyor; bu çalışma ağacının uzaktaki CI sonucu henüz yok. |
 | 7 | Kaynakta gizli anahtar bulunmaması | Kısmi | İzlenen env dosyası `.env.example`; service-role anahtarı görülmedi. GitHub secret scanning ayrıca açılmalı. |

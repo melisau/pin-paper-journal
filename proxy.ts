@@ -25,7 +25,12 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  await supabase.auth.getClaims();
+  try {
+    await supabase.auth.getClaims();
+  } catch {
+    // Refresh is best-effort here. Protected pages independently verify the
+    // session and can show a retry screen when the auth service is unreachable.
+  }
   return response;
 }
 

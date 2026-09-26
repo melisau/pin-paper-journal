@@ -1,0 +1,192 @@
+"use client";
+
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { BookOpen, LockKeyhole, Mail } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { createAccountKeyBundle, unwrapKey, type WrappedKey } from "@/lib/crypto";
+import { isHighSecurityMode, restoreAccountMasterKey, setAccountMasterKey, setHighSecurityMode } from "@/lib/key-vault";
+import { LanguageSwitcher, useLanguage } from "@/components/language-switcher";
+import { recordOperationalTiming, reportOperationalError, safeErrorCode } from "@/lib/error-monitoring";
+
+const wrappedKeyCacheKey = (userId: string) => `pin-paper-wrapped-key:${userId}`;
+
+function initialMessage(authIssue?: string, callbackError?: string) {
+  if (authIssue === "key") return "Your journal encryption key is locked. Enter your password again to unlock your journals.";
+  if (authIssue === "session") return "We couldn't verify your sign-in with the journal server. Please sign in again.";
+  if (callbackError === "recovery-session") return "The recovery link is missing or expired. Request a new password-reset email.";
+  if (callbackError === "confirmation") return "The email link is invalid or expired. Request a new one.";
+  return "";
+}
+
+export default function AuthForm({ authIssue, callbackError }: { authIssue?: string; callbackError?: string }) {
+  const router = useRouter();
+  const { t } = useLanguage();
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [message, setMessage] = useState(() => initialMessage(authIssue, callbackError));
+  const [authFailureCode, setAuthFailureCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [needsRecovery, setNeedsRecovery] = useState(false);
+  const [highSecurity, setHighSecurity] = useState(false);
+  const entryAttempt = useRef(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const attempt = entryAttempt.current;
+    const isCurrent = () => !cancelled && entryAttempt.current === attempt;
+    queueMicrotask(() => {
+      if (!isCurrent()) return;
+      setHighSecurity(isHighSecurityMode());
+      if (authIssue || callbackError) {
+        setMessage(initialMessage(authIssue, callbackError));
+        setBusy(false);
+      }
+    });
+    // A protected route sent the user here. Only an explicit sign-in may retry;
+    // a cached browser session is not proof that the server accepted it.
+    if (authIssue || callbackError) return () => { cancelled = true; };
+    void (async () => {
+      const client = createClient();
+      const { data, error } = await client.auth.getSession();
+      const userId = data.session?.user.id;
+      if (error || !userId || !isCurrent()) return;
+      const unlocked = await restoreAccountMasterKey(userId);
+      if (unlocked && isCurrent()) router.replace("/journal");
+    })().catch(error => reportOperationalError(error, "auth"));
+    return () => { cancelled = true; };
+  }, [router, authIssue, callbackError]);
+
+  function formatEncryptionSetupError(error: unknown) {
+    const message = error instanceof Error ? error.message : "";
+    if (message.includes("public.user_key_bundles") || message.includes("schema cache")) {
+      return "Your account opened, but the Supabase migration has not been applied yet. Run supabase/migrations/001_secure_journal.sql in your project.";
+    }
+    return message ? `Your account opened, but encryption setup could not be completed: ${message}` : "Your account opened, but encryption setup could not be completed.";
+  }
+
+  async function ensureEncryptionKeys(userId: string) {
+    if (await restoreAccountMasterKey(userId)) return false;
+    const cached = localStorage.getItem(wrappedKeyCacheKey(userId));
+    if (cached) {
+      try {
+        const wrapped = JSON.parse(cached) as WrappedKey;
+        await setAccountMasterKey(await unwrapKey(wrapped, password), userId, !highSecurity);
+        return false;
+      } catch {
+        localStorage.removeItem(wrappedKeyCacheKey(userId));
+      }
+    }
+    const supabase = createClient();
+    const { data, error: readError } = await supabase.from("user_key_bundles").select("user_id, wrapped_by_password").eq("user_id", userId).maybeSingle();
+    if (readError) throw new Error(readError.message);
+    if (data) {
+      const wrapped = data.wrapped_by_password as WrappedKey;
+      await setAccountMasterKey(await unwrapKey(wrapped, password), userId, !highSecurity);
+      localStorage.setItem(wrappedKeyCacheKey(userId), JSON.stringify(wrapped));
+      return false;
+    }
+    const bundle = await createAccountKeyBundle(password);
+    const { error } = await supabase.from("user_key_bundles").insert({
+      user_id: userId,
+      wrapped_by_password: bundle.wrappedByPassword,
+      wrapped_by_recovery: bundle.wrappedByRecovery,
+    });
+    if (error) throw new Error(error.message);
+    await setAccountMasterKey(bundle.masterKey, userId, !highSecurity);
+    localStorage.setItem(wrappedKeyCacheKey(userId), JSON.stringify(bundle.wrappedByPassword));
+    setRecoveryCode(bundle.recoveryCode);
+    return true;
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    entryAttempt.current += 1;
+    setBusy(true);
+    setMessage("");
+    setAuthFailureCode("");
+    setNeedsRecovery(false);
+    let navigating = false;
+    try {
+    const supabase = createClient();
+    if (mode === "signup") {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      });
+      setMessage(error ? error.message : "Check your email to confirm your account.");
+    } else {
+      const signInStarted = performance.now();
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) setMessage(error.message);
+      else if (data.user) {
+        recordOperationalTiming("auth", "password-sign-in", signInStarted);
+        try {
+          const unlockStarted = performance.now();
+          const created = await ensureEncryptionKeys(data.user.id);
+          recordOperationalTiming("auth", "master-key-unlock", unlockStarted);
+          if (created) setMessage("Save your recovery code before continuing.");
+          else { router.replace("/journal"); navigating = true; }
+        } catch (error) {
+          const encryptionMessage = formatEncryptionSetupError(error);
+          const requiresRecovery = encryptionMessage.includes("operation-specific") || encryptionMessage.includes("decrypt") || encryptionMessage.includes("Encrypted data is incomplete or invalid.");
+          setMessage(requiresRecovery
+            ? "Your account password is valid, but it no longer opens the journal encryption key. Use your recovery code to reconnect it."
+            : encryptionMessage);
+          setNeedsRecovery(requiresRecovery);
+        }
+      }
+    }
+    } catch (error) {
+      reportOperationalError(error, "auth");
+      setAuthFailureCode(safeErrorCode(error));
+      setMessage("Authentication could not finish. Check your connection and try again.");
+    } finally {
+      if (!navigating) setBusy(false);
+    }
+  }
+
+  async function resetPassword() {
+    if (!email) return setMessage("Enter your email first.");
+    setBusy(true);
+    setNeedsRecovery(false);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/callback?next=/account/recovery`,
+      });
+      setMessage(error ? error.message : "If an account exists for this email, a reset link has been sent. Check spam too. You will need your Pin & Paper recovery code after opening the link.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "The reset request could not be sent.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return <main className="auth-screen">
+    <section className="auth-paper">
+      <LanguageSwitcher/>
+      <div className="auth-mark"><BookOpen /><span>PIN & PAPER</span></div>
+      <p className="auth-kicker">{t("Your private corner of memories")}</p>
+      <h1>{t(mode === "signin" ? "Welcome back" : "Create your journal")}</h1>
+      <p className="auth-copy">{t("Your journal content is encrypted in your browser before it is saved.")}</p>
+      <form onSubmit={submit}>
+        <label><span><Mail /> {t("Email")}</span><input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></label>
+        <label><span><LockKeyhole /> {t("Password")}</span><input type="password" minLength={10} autoComplete={mode === "signin" ? "current-password" : "new-password"} required value={password} onChange={e => setPassword(e.target.value)} /></label>
+        <label className="security-mode"><input type="checkbox" checked={highSecurity} onChange={e => { const enabled=e.target.checked;setHighSecurity(enabled);void setHighSecurityMode(enabled); }}/><span>{t("High security — keep the journal key only in memory")}</span></label>
+        <button className="auth-submit" disabled={busy}>{t(busy ? "Please wait…" : mode === "signin" ? "Open my journals" : "Create account")}</button>
+      </form>
+      {message && <p className="auth-message" role="status">{t(message)}{authFailureCode && <small> ({authFailureCode})</small>}</p>}
+      {needsRecovery && <button className="auth-link recovery-link" onClick={() => router.push("/account/recovery")}>{t("Use recovery code")}</button>}
+      {recoveryCode && <div className="recovery-card"><strong>{t("Your recovery code")}</strong><code>{recoveryCode}</code><p>{t("Store it in a password manager. It is not saved as readable text.")}</p><button onClick={() => navigator.clipboard.writeText(recoveryCode)}>{t("Copy code")}</button><button onClick={() => router.push("/journal")}>{t("I saved it — continue")}</button></div>}
+      {mode === "signin" && <button className="auth-link" onClick={resetPassword}>{t("Forgot password?")}</button>}
+      <button className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>
+        {t(mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in")}
+      </button>
+      <p className="auth-security"><LockKeyhole /> {t("Database access alone cannot reveal journal text.")}</p>
+    </section>
+  </main>;
+}

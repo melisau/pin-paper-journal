@@ -3,6 +3,11 @@ export type Language = "en" | "tr";
 export const LANGUAGE_STORAGE_KEY = "pin-paper-language";
 
 const turkish: Record<string, string> = {
+  "Let's try that again": "Yeniden deneyelim",
+  "We couldn't verify your sign-in right now. Please try again.": "Oturumun şu anda doğrulanamadı. Lütfen yeniden dene.",
+  "Sign in again": "Yeniden giriş yap",
+  "Your journal encryption key is locked. Enter your password again to unlock your journals.": "Defter şifreleme anahtarın kilitli. Defterlerini açmak için parolanı yeniden gir.",
+  "We couldn't verify your sign-in with the journal server. Please sign in again.": "Defter sunucusunda oturumun doğrulanamadı. Lütfen yeniden giriş yap.",
   "English": "İngilizce", "Turkish": "Türkçe", "Language": "Dil",
   "Your private corner of memories": "Anıların için özel bir köşe",
   "Welcome back": "Tekrar hoş geldin", "Create your journal": "Defterini oluştur",

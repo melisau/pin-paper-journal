@@ -84,7 +84,9 @@ export default function Home({ cloudUserId }: { cloudUserId?: string }){
   const load=async()=>{
    setLibraryBusy(true);
    try{
-    if(!hasAccountMasterKey()&&!await restoreAccountMasterKey(cloudUserId)){router.replace("/");return}
+    const unlocked=hasAccountMasterKey()||await restoreAccountMasterKey(cloudUserId);
+    if(cancelled)return;
+    if(!unlocked){router.replace("/?auth=key");return}
     const partialBooks:Array<Book|undefined>=[];
     const loaded=await listEncryptedJournals(getAccountMasterKey(),(book,index)=>{
      partialBooks[index]=book;
