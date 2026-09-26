@@ -2,7 +2,7 @@
 
 Kapsam: yerel kaynak kodu ve `/preview` üzerinde otomatik tarayıcı testleri. Canlı Supabase, dağıtım, gerçek telefon ve GitHub koruma ayarları bu raporda doğrulanmadı. Testlerde gerçek günlük içeriği yerine örnek veri kullanılmalıdır.
 
-Karar: **Henüz yayına hazır değil.** Özellikle `lib/cloud-drafts.ts` bulut taslaklarını okunabilir JSON olarak `localStorage` içine yazıyor. Oturumdan çıkış, eşitlenmeyi bekleyen taslakları cihazda tuttuğu için bu veri çıkıştan sonra da kalabiliyor. Bu durum `SECURITY_AUDIT_PLAN.md` içindeki “no plaintext cloud draft” yayın koşuluyla çelişiyor.
+Karar: **Henüz yayına hazır değil.** Bu çalışma ağacında bulut taslaklarının `localStorage` içinde açık metin tutulması giderildi: taslak gövdesi hesap anahtarıyla AES-GCM kullanılarak şifreleniyor; eski açık taslaklar ilgili hesap açıldığında şifreli biçime taşınıyor. Yerel testler şifreli depolamayı, eski taslak geçişini, yanlış/tahrif edilmiş şifreli veriyi ve çevrimdışı sırayı kapsıyor. Eski kullanıcı verisiyle gerçek hesapta geçiş ve çıkış/yeniden giriş provası hâlâ yapılmalı. Canlı Supabase, dağıtım, gerçek telefon ve GitHub koruma ayarları da bu raporda doğrulanmadı.
 
 ## 23 kontrol
 
@@ -10,10 +10,10 @@ Durumlar: **Geçti** = yerel test veya doğrudan kod kanıtı; **Kısmi** = yere
 
 | # | Kontrol | Durum | Kanıt / eksik adım |
 |---|---|---|---|
-| 1 | Production build | Geçti | `npm run test:e2e` öncesindeki Next.js build tamamlandı. |
-| 2 | TypeScript | Geçti | Aynı build TypeScript aşamasını tamamladı. |
+| 1 | Production build | Geçti | `npm run build` tamamlandı. |
+| 2 | TypeScript | Geçti | Production build TypeScript aşamasını tamamladı. |
 | 3 | Lint | Geçti | `npm run lint` hata vermedi. |
-| 4 | Birim testleri | Geçti | `npm test`: 24 dosyada 70/70. |
+| 4 | Birim testleri | Geçti | `npm test`: 24 dosyada 74/74. |
 | 5 | Migration sırası ve temel güvenlik denetimi | Geçti | `npm run migration:check`: 3 sıralı migration. Canlı veritabanına uygulanmış olmaları ayrıca doğrulanmalı. |
 | 6 | CI kalite kapısı | Kısmi | `.github/workflows/ci.yml` lint, test, build, migration ve mobil E2E içeriyor; bu çalışma ağacının uzaktaki CI sonucu henüz yok. |
 | 7 | Kaynakta gizli anahtar bulunmaması | Kısmi | İzlenen env dosyası `.env.example`; service-role anahtarı görülmedi. GitHub secret scanning ayrıca açılmalı. |
@@ -21,7 +21,7 @@ Durumlar: **Geçti** = yerel test veya doğrudan kod kanıtı; **Kısmi** = yere
 | 9 | Giriş, oturum yenileme ve çıkış | Kısmi | Yerel auth testleri var; gerçek Supabase/telefon üzerinde yeniden giriş ve çıkış henüz denenmedi. |
 | 10 | Parola kurtarma | Kısmi | Kurtarma kodu birim testleri geçiyor; üretim e-postası ve kayıp kod senaryosu denenmedi. |
 | 11 | Sayfa ve medya şifreleme | Geçti | AES-GCM, rastgele IV, parola/kurtarma sarmalama ve medya baytları birim testleriyle doğrulanıyor. |
-| 12 | Bulut taslaklarının cihazda şifrelenmesi | **Engel** | `lib/cloud-drafts.ts` sayfa metnini `JSON.stringify(document)` ile açık `localStorage` içine yazıyor. |
+| 12 | Bulut taslaklarının cihazda şifrelenmesi | Kısmi | Taslak gövdesi AES-GCM/hesap anahtarıyla şifreli; eski taslaklar şifreli biçime taşınıyor. Birim testleri geçti; gerçek hesapta eski verinin migrasyonu ve sign-out/re-login provası bekliyor. |
 | 13 | Anahtarın cihazda tutulması | Kısmi | `lib/key-vault.ts` normal modda çıkarılabilir `CryptoKey` değerini IndexedDB'de saklıyor; yüksek güvenlik modu bellekte tutuyor. Paylaşılan cihaz ve XSS riski ayrıca değerlendirilmeli. |
 | 14 | Şifreli yedek dışa/içe aktarma | Geçti | Birim ve mobil E2E yedek akışı geçti. Gerçek bulut yedeğiyle geri yükleme provası bekliyor. |
 | 15 | Fotoğraf yükleme, yeniden açma ve önbellek | Kısmi | Sıkıştırma, şifreli varlık, IndexedDB önbelleği, görünür sayfayı yükleme ve URL temizliği kod/test düzeyinde var; gerçek düşük bellekli telefonda doğrulanmalı. |
