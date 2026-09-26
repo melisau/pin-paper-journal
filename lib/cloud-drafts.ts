@@ -12,7 +12,16 @@ export function readCloudDraft(journalId: string): JournalDocument | null {
     if (!raw) return null;
     const value = JSON.parse(raw) as Partial<JournalDocument>;
     if (value.version !== 2 || !Array.isArray(value.pages) || typeof value.updatedAt !== "string") return null;
-    return value as JournalDocument;
+    // Object URLs belong to the tab that created them. Restore encrypted assets
+    // by ID instead of trying to render a stale blob: URL after reopening.
+    return {
+      ...value,
+      pages: value.pages.map(page => ({
+        ...page,
+        photos: (page.photos ?? []).map(photo => photo.assetId && photo.src?.startsWith("blob:") ? { ...photo, src: "" } : photo),
+        drawingData: page.drawingAssetId && page.drawingData?.startsWith("blob:") ? "" : page.drawingData,
+      })),
+    } as JournalDocument;
   } catch {
     return null;
   }

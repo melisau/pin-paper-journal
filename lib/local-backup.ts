@@ -1,4 +1,4 @@
-import type { Book } from "@/lib/journal-model";
+import { JOURNAL_COVER_IDS, type Book, type JournalCover } from "@/lib/journal-model";
 import { decryptJson, encryptJson, generateEncryptionKey, unwrapKey, wrapKey, type EncryptedValue, type WrappedKey } from "@/lib/crypto";
 
 export type JournalBackup = {
@@ -42,7 +42,8 @@ export function isEncryptedBackup(raw: string) {
 function isBook(value: unknown): value is Book {
   if (!value || typeof value !== "object") return false;
   const book = value as Record<string, unknown>;
-  return [book.id, book.title, book.tone, book.label].every(item => typeof item === "string");
+  return [book.id, book.title, book.tone, book.label].every(item => typeof item === "string")
+    && (book.cover === undefined || JOURNAL_COVER_IDS.includes(book.cover as JournalCover));
 }
 
 export function makeBackup(books: Book[], readJournal: (id: string) => string | null): JournalBackup {

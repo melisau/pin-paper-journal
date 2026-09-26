@@ -16,6 +16,7 @@ export function journalChangeSignature(pages: PageData[], themeName: string) {
         z: photo.z,
         size: photo.size,
         shape: photo.shape,
+        locked: photo.locked,
       })),
     })),
   });

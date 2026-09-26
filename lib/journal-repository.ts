@@ -1,32 +1,62 @@
 import type { Book } from "@/lib/journal-model";
-import { createJournalKeyBundle, decryptJson, encryptJson, unwrapJournalKey, type EncryptedValue, type WrappedKey } from "@/lib/crypto";
+import { addLegacyJournalWrap, createJournalKeyBundle, decryptJson, encryptJson, rewrapJournalKeyForMaster, unwrapJournalKey, type EncryptedValue, type MasterWrappedKey } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/client";
 import { clearJournalKey, getCachedJournalKey, setJournalKey } from "@/lib/key-vault";
+import { recordOperationalTiming } from "@/lib/error-monitoring";
 
 type JournalRow = {
   id: string;
   encrypted_metadata: EncryptedValue;
-  wrapped_key_by_master: WrappedKey;
+  wrapped_key_by_master: MasterWrappedKey;
 };
 
 function message(error: { message: string } | null) {
   if (error) throw new Error(error.message);
 }
 
-export async function listEncryptedJournals(masterKey: CryptoKey): Promise<Book[]> {
+export async function listEncryptedJournals(masterKey: CryptoKey, onBook?: (book: Book, index: number) => void): Promise<Book[]> {
   const supabase = createClient();
+  const queryStarted = performance.now();
   const { data, error } = await supabase
     .from("journals")
     .select("id, encrypted_metadata, wrapped_key_by_master")
     .order("created_at", { ascending: true });
   message(error);
+  recordOperationalTiming("data", "journal-query", queryStarted);
 
-  return Promise.all((data as JournalRow[]).map(async row => {
+  const rows = (data ?? []) as JournalRow[];
+  const books = new Array<Book>(rows.length);
+  const decryptStarted = performance.now();
+  const openRow = async (row: JournalRow, index: number) => {
     const journalKey = await unwrapJournalKey(masterKey, row.wrapped_key_by_master);
     setJournalKey(row.id, journalKey);
     const metadata = await decryptJson<Omit<Book, "id">>(row.encrypted_metadata, journalKey);
-    return { id: row.id, ...metadata };
-  }));
+    const book = { id: row.id, ...metadata };
+    books[index] = book;
+    onBook?.(book, index);
+
+    // Retain the legacy wrapper for older clients and add a faster wrapper
+    // alongside it. The encrypted metadata and page content do not change.
+    if (row.wrapped_key_by_master.kdf === "AES-GCM-MASTER") {
+      // A short-lived format omitted the legacy fields. Restore them without
+      // touching the key or journal contents, so older clients can open it.
+      void addLegacyJournalWrap(masterKey, journalKey, row.wrapped_key_by_master).then(async wrapped => {
+        await supabase.from("journals").update({ wrapped_key_by_master: wrapped }).eq("id", row.id);
+      }).catch(() => { /* Keep the fast-only wrapper readable if the update fails. */ });
+    } else if (!row.wrapped_key_by_master.fast_wrap) {
+      void rewrapJournalKeyForMaster(masterKey, journalKey).then(async fastWrap => {
+        await supabase.from("journals").update({ wrapped_key_by_master: { ...row.wrapped_key_by_master, fast_wrap: fastWrap } }).eq("id", row.id);
+      }).catch(() => { /* A failed upgrade leaves the legacy wrapper readable. */ });
+    }
+  };
+
+  // Reveal one real cover before doing the remaining CPU-heavy legacy unwraps.
+  if (rows.length) await openRow(rows[0], 0);
+  for (let index = 1; index < rows.length; index += 3) {
+    await Promise.all(rows.slice(index, index + 3).map((row, offset) => openRow(row, index + offset)));
+  }
+  recordOperationalTiming("data", "journal-decrypt", decryptStarted);
+  return books;
 }
 
 export async function createEncryptedJournal(userId: string, masterKey: CryptoKey, metadata: Omit<Book, "id">): Promise<Book> {
@@ -50,7 +80,7 @@ export async function getEncryptedJournalKey(masterKey: CryptoKey, journalId: st
   const { data, error } = await createClient().from("journals").select("wrapped_key_by_master").eq("id", journalId).single();
   message(error);
   if (!data) throw new Error("The encrypted journal could not be found.");
-  const key = await unwrapJournalKey(masterKey, data.wrapped_key_by_master as WrappedKey);
+  const key = await unwrapJournalKey(masterKey, data.wrapped_key_by_master as MasterWrappedKey);
   setJournalKey(journalId, key);
   return key;
 }
@@ -65,8 +95,8 @@ export async function updateEncryptedJournal(masterKey: CryptoKey, book: Book, c
   message(error);
   if (!data) throw new Error("The encrypted journal could not be found.");
 
-  const journalKey = await unwrapJournalKey(masterKey, data.wrapped_key_by_master as WrappedKey);
-  const encryptedMetadata = await encryptJson({ title: book.title, tone: book.tone, label: book.label, ...changes }, journalKey);
+  const journalKey = await unwrapJournalKey(masterKey, data.wrapped_key_by_master as MasterWrappedKey);
+  const encryptedMetadata = await encryptJson({ title: book.title, tone: book.tone, label: book.label, cover: book.cover, ...changes }, journalKey);
   const { error: updateError } = await supabase
     .from("journals")
     .update({ encrypted_metadata: encryptedMetadata, updated_at: new Date().toISOString() })

@@ -15,6 +15,13 @@ describe("local backups", () => {
     expect(() => parseBackup('{"version":1}')).toThrow("not a supported Pin & Paper backup");
   });
 
+  it("preserves a ready-made cover and rejects an unknown cover path", () => {
+    const backup = makeBackup([{ ...books[0], cover: "journal-13" as const }], () => null);
+    expect(parseBackup(JSON.stringify(backup)).books[0].cover).toBe("journal-13");
+    backup.books[0].cover = "../private" as typeof backup.books[0]["cover"];
+    expect(() => parseBackup(JSON.stringify(backup))).toThrow("not a supported Pin & Paper backup");
+  });
+
   it("password-encrypts portable backup files", async () => {
     const backup = makeBackup(books, () => JSON.stringify({ pages: [{ note: "private" }] }));
     const encrypted = await encryptBackup(backup, "a-long-backup-password");

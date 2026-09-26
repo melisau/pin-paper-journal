@@ -23,6 +23,10 @@ async function readCachedAsset(id:string) {
   try{const db=await openAssetCache();if(!db)return null;const cached=await new Promise<CachedAsset|undefined>((resolve,reject)=>{const request=db.transaction(CACHE_STORE,"readonly").objectStore(CACHE_STORE).get(id);request.onsuccess=()=>resolve(request.result as CachedAsset|undefined);request.onerror=()=>reject(request.error)});db.close();return cached??null}catch{return null}
 }
 
+async function removeCachedAsset(id:string) {
+  try{const db=await openAssetCache();if(!db)return;const transaction=db.transaction(CACHE_STORE,"readwrite");transaction.objectStore(CACHE_STORE).delete(id);await new Promise<void>((resolve,reject)=>{transaction.oncomplete=()=>resolve();transaction.onerror=()=>reject(transaction.error)});db.close()}catch{/* A broken cache must not block a fresh download. */}
+}
+
 async function cacheEncryptedAsset(asset:CachedAsset) {
   try{const db=await openAssetCache();if(!db)return;const existing=await new Promise<CachedAsset[]>((resolve,reject)=>{const request=db.transaction(CACHE_STORE,"readonly").objectStore(CACHE_STORE).getAll();request.onsuccess=()=>resolve(request.result as CachedAsset[]);request.onerror=()=>reject(request.error)});const removals=existing.filter(item=>item.id!==asset.id).sort((a,b)=>a.accessedAt-b.accessedAt);let total=removals.reduce((sum,item)=>sum+item.size,0)+asset.size;const transaction=db.transaction(CACHE_STORE,"readwrite"),store=transaction.objectStore(CACHE_STORE);while(total>MAX_CACHE_BYTES&&removals.length){const oldest=removals.shift()!;store.delete(oldest.id);total-=oldest.size}store.put(asset);await new Promise<void>((resolve,reject)=>{transaction.oncomplete=()=>resolve();transaction.onerror=()=>reject(transaction.error)});db.close()}catch{/* Cache failures must never block encrypted media. */}
 }
@@ -106,7 +110,10 @@ export function uploadEncryptedAsset(options: {
 
 export async function loadEncryptedAsset(assetId: string, journalKey: CryptoKey) {
   const cached=await readCachedAsset(assetId);
-  if(cached){const metadata=await decryptJson<AssetMetadata>(cached.encryptedMetadata,journalKey);const plaintext=await decryptBinary(cached.ciphertext,metadata.iv,journalKey);const objectUrl=URL.createObjectURL(new Blob([plaintext],{type:metadata.mimeType}));managedObjectUrls.add(objectUrl);return objectUrl}
+  if(cached){
+    try{const metadata=await decryptJson<AssetMetadata>(cached.encryptedMetadata,journalKey);const plaintext=await decryptBinary(cached.ciphertext,metadata.iv,journalKey);const objectUrl=URL.createObjectURL(new Blob([plaintext],{type:metadata.mimeType}));managedObjectUrls.add(objectUrl);return objectUrl}
+    catch{await removeCachedAsset(assetId)}
+  }
   const supabase = createClient();
   const { data: row, error: rowError } = await supabase
     .from("encrypted_assets")
@@ -122,8 +129,8 @@ export async function loadEncryptedAsset(assetId: string, journalKey: CryptoKey)
   fail(downloadError);
   if (!encryptedFile) throw new Error("The encrypted media item could not be downloaded.");
   const ciphertext=await encryptedFile.arrayBuffer();
-  await cacheEncryptedAsset({id:assetId,ciphertext,encryptedMetadata:asset.encrypted_metadata,size:ciphertext.byteLength,accessedAt:Date.now()});
   const plaintext = await decryptBinary(ciphertext, metadata.iv, journalKey);
+  await cacheEncryptedAsset({id:assetId,ciphertext,encryptedMetadata:asset.encrypted_metadata,size:ciphertext.byteLength,accessedAt:Date.now()});
   const objectUrl = URL.createObjectURL(new Blob([plaintext], { type: metadata.mimeType }));
   managedObjectUrls.add(objectUrl);
   return objectUrl;

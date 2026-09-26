@@ -54,6 +54,7 @@ export async function importCloudBackup(options: { backup: JournalBackup; userId
       title: sourceBook.title,
       tone: sourceBook.tone,
       label: sourceBook.label,
+      cover: sourceBook.cover,
     });
     const pages = raw.pages.map(page => ({
       ...page,

@@ -1,6 +1,7 @@
 export type OperationScope = "auth" | "sync" | "media" | "ui" | "data";
 export type OperationStatus = "started" | "success" | "offline" | "retry" | "failure";
-export type OperationalEvent = { at: string; scope: OperationScope; status: OperationStatus; code?: string };
+export type TimingStage = "password-sign-in" | "master-key-unlock" | "journal-query" | "journal-decrypt";
+export type OperationalEvent = { at: string; scope: OperationScope; status: OperationStatus; code?: string; stage?: TimingStage; durationMs?: number };
 
 const STORAGE_KEY = "pin-paper-operational-events-v1";
 const EVENT_NAME = "pin-paper-operational-event";
@@ -25,10 +26,25 @@ export function readOperationalEvents(scope?: OperationScope): OperationalEvent[
 
 export function recordOperationalEvent(scope: OperationScope, status: OperationStatus, error?: unknown) {
   if (typeof window === "undefined") return;
-  const event: OperationalEvent = { at: new Date().toISOString(), scope, status, ...(error ? { code: safeErrorCode(error) } : {}) };
-  const events = [...readOperationalEvents(), event].slice(-MAX_EVENTS);
-  sessionStorage.setItem(STORAGE_KEY, JSON.stringify(events));
-  window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: event }));
+  try {
+    const event: OperationalEvent = { at: new Date().toISOString(), scope, status, ...(error ? { code: safeErrorCode(error) } : {}) };
+    const events = [...readOperationalEvents(), event].slice(-MAX_EVENTS);
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: event }));
+  } catch { /* Telemetry must not interrupt sign-in or journaling. */ }
+}
+
+export function recordOperationalTiming(scope: OperationScope, stage: TimingStage, startedAt: number) {
+  if (typeof window === "undefined") return;
+  try {
+    const event: OperationalEvent = {
+      at: new Date().toISOString(), scope, status: "success", stage,
+      durationMs: Math.max(0, Math.round(performance.now() - startedAt)),
+    };
+    const events = [...readOperationalEvents(), event].slice(-MAX_EVENTS);
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(events));
+    window.dispatchEvent(new CustomEvent(EVENT_NAME, { detail: event }));
+  } catch { /* Diagnostic timing is optional. */ }
 }
 
 export function subscribeToOperationalEvents(listener: () => void) {

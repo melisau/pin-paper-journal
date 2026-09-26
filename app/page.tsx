@@ -6,15 +6,19 @@ import { BookOpen, LockKeyhole, Mail } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { createAccountKeyBundle, unwrapKey, type WrappedKey } from "@/lib/crypto";
 import { isHighSecurityMode, restoreAccountMasterKey, setAccountMasterKey, setHighSecurityMode } from "@/lib/key-vault";
+import { LanguageSwitcher, useLanguage } from "@/components/language-switcher";
+import { recordOperationalTiming, reportOperationalError, safeErrorCode } from "@/lib/error-monitoring";
 
 const wrappedKeyCacheKey = (userId: string) => `pin-paper-wrapped-key:${userId}`;
 
 export default function AuthPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
+  const [authFailureCode, setAuthFailureCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
   const [needsRecovery, setNeedsRecovery] = useState(false);
@@ -26,7 +30,7 @@ export default function AuthPage() {
     void createClient().auth.getSession().then(async ({ data }) => {
       const userId = data.session?.user.id;
       if (userId && await restoreAccountMasterKey(userId) && !cancelled) router.replace("/journal");
-    });
+    }).catch(error => reportOperationalError(error, "auth"));
     queueMicrotask(() => {
       if (cancelled) return;
       const error = new URLSearchParams(window.location.search).get("error");
@@ -82,7 +86,10 @@ export default function AuthPage() {
     event.preventDefault();
     setBusy(true);
     setMessage("");
+    setAuthFailureCode("");
     setNeedsRecovery(false);
+    let navigating = false;
+    try {
     const supabase = createClient();
     if (mode === "signup") {
       const { error } = await supabase.auth.signUp({
@@ -92,16 +99,20 @@ export default function AuthPage() {
       });
       setMessage(error ? error.message : "Check your email to confirm your account.");
     } else {
+      const signInStarted = performance.now();
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setMessage(error.message);
       else if (data.user) {
+        recordOperationalTiming("auth", "password-sign-in", signInStarted);
         try {
+          const unlockStarted = performance.now();
           const created = await ensureEncryptionKeys(data.user.id);
+          recordOperationalTiming("auth", "master-key-unlock", unlockStarted);
           if (created) setMessage("Save your recovery code before continuing.");
-          else router.replace("/journal");
+          else { router.replace("/journal"); navigating = true; }
         } catch (error) {
           const encryptionMessage = formatEncryptionSetupError(error);
-          const requiresRecovery = encryptionMessage.includes("operation-specific") || encryptionMessage.includes("decrypt");
+          const requiresRecovery = encryptionMessage.includes("operation-specific") || encryptionMessage.includes("decrypt") || encryptionMessage.includes("Encrypted data is incomplete or invalid.");
           setMessage(requiresRecovery
             ? "Your account password is valid, but it no longer opens the journal encryption key. Use your recovery code to reconnect it."
             : encryptionMessage);
@@ -109,7 +120,13 @@ export default function AuthPage() {
         }
       }
     }
-    setBusy(false);
+    } catch (error) {
+      reportOperationalError(error, "auth");
+      setAuthFailureCode(safeErrorCode(error));
+      setMessage("Authentication could not finish. Check your connection and try again.");
+    } finally {
+      if (!navigating) setBusy(false);
+    }
   }
 
   async function resetPassword() {
@@ -131,24 +148,25 @@ export default function AuthPage() {
 
   return <main className="auth-screen">
     <section className="auth-paper">
+      <LanguageSwitcher/>
       <div className="auth-mark"><BookOpen /><span>PIN & PAPER</span></div>
-      <p className="auth-kicker">Your private corner of memories</p>
-      <h1>{mode === "signin" ? "Welcome back" : "Create your journal"}</h1>
-      <p className="auth-copy">Your journal content is encrypted in your browser before it is saved.</p>
+      <p className="auth-kicker">{t("Your private corner of memories")}</p>
+      <h1>{t(mode === "signin" ? "Welcome back" : "Create your journal")}</h1>
+      <p className="auth-copy">{t("Your journal content is encrypted in your browser before it is saved.")}</p>
       <form onSubmit={submit}>
-        <label><span><Mail /> Email</span><input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></label>
-        <label><span><LockKeyhole /> Password</span><input type="password" minLength={10} autoComplete={mode === "signin" ? "current-password" : "new-password"} required value={password} onChange={e => setPassword(e.target.value)} /></label>
-        <label className="security-mode"><input type="checkbox" checked={highSecurity} onChange={e => { const enabled=e.target.checked;setHighSecurity(enabled);void setHighSecurityMode(enabled); }}/><span>High security — keep the journal key only in memory</span></label>
-        <button className="auth-submit" disabled={busy}>{busy ? "Please wait…" : mode === "signin" ? "Open my journals" : "Create account"}</button>
+        <label><span><Mail /> {t("Email")}</span><input type="email" autoComplete="email" required value={email} onChange={e => setEmail(e.target.value)} /></label>
+        <label><span><LockKeyhole /> {t("Password")}</span><input type="password" minLength={10} autoComplete={mode === "signin" ? "current-password" : "new-password"} required value={password} onChange={e => setPassword(e.target.value)} /></label>
+        <label className="security-mode"><input type="checkbox" checked={highSecurity} onChange={e => { const enabled=e.target.checked;setHighSecurity(enabled);void setHighSecurityMode(enabled); }}/><span>{t("High security — keep the journal key only in memory")}</span></label>
+        <button className="auth-submit" disabled={busy}>{t(busy ? "Please wait…" : mode === "signin" ? "Open my journals" : "Create account")}</button>
       </form>
-      {message && <p className="auth-message" role="status">{message}</p>}
-      {needsRecovery && <button className="auth-link recovery-link" onClick={() => router.push("/account/recovery")}>Use recovery code</button>}
-      {recoveryCode && <div className="recovery-card"><strong>Your recovery code</strong><code>{recoveryCode}</code><p>Store it in a password manager. It is not saved as readable text.</p><button onClick={() => navigator.clipboard.writeText(recoveryCode)}>Copy code</button><button onClick={() => router.push("/journal")}>I saved it — continue</button></div>}
-      {mode === "signin" && <button className="auth-link" onClick={resetPassword}>Forgot password?</button>}
+      {message && <p className="auth-message" role="status">{t(message)}{authFailureCode && <small> ({authFailureCode})</small>}</p>}
+      {needsRecovery && <button className="auth-link recovery-link" onClick={() => router.push("/account/recovery")}>{t("Use recovery code")}</button>}
+      {recoveryCode && <div className="recovery-card"><strong>{t("Your recovery code")}</strong><code>{recoveryCode}</code><p>{t("Store it in a password manager. It is not saved as readable text.")}</p><button onClick={() => navigator.clipboard.writeText(recoveryCode)}>{t("Copy code")}</button><button onClick={() => router.push("/journal")}>{t("I saved it — continue")}</button></div>}
+      {mode === "signin" && <button className="auth-link" onClick={resetPassword}>{t("Forgot password?")}</button>}
       <button className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>
-        {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
+        {t(mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in")}
       </button>
-      <p className="auth-security"><LockKeyhole /> Database access alone cannot reveal journal text.</p>
+      <p className="auth-security"><LockKeyhole /> {t("Database access alone cannot reveal journal text.")}</p>
     </section>
   </main>;
 }

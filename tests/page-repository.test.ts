@@ -89,7 +89,7 @@ describe("encrypted page sync", () => {
   it("uploads photos and drawings, persists only asset references, and reports progress", async () => {
     mocks.upload.mockResolvedValueOnce("photo-asset").mockResolvedValueOnce("drawing-asset");
     const page = makePage(1, "Media");
-    page.photos = [{ id: 1, src: "data:image/jpeg;base64,plain", x: 0, y: 0, rotation: 0, framed: false, z: 1, size: 100, shape: "square" }];
+    page.photos = [{ id: 1, src: "data:image/jpeg;base64,plain", x: 0, y: 0, rotation: 0, framed: false, z: 1, size: 100, shape: "square", locked: true }];
     page.drawingData = "data:image/png;base64,drawing";
     const progress = vi.fn();
 
@@ -97,7 +97,7 @@ describe("encrypted page sync", () => {
     const payload = await decryptJson<Record<string, unknown>>(mocks.rpc.mock.calls[0][1].p_pages[0].encrypted_payload, mocks.key!);
     expect(payload).not.toHaveProperty("drawingData");
     expect(JSON.stringify(payload)).not.toContain("base64");
-    expect(payload).toMatchObject({ drawingAssetId: "drawing-asset", photos: [{ assetId: "photo-asset" }] });
+    expect(payload).toMatchObject({ drawingAssetId: "drawing-asset", photos: [{ assetId: "photo-asset", locked: true }] });
     expect(progress.mock.calls).toEqual([[0, 2], [1, 2], [2, 2]]);
     expect(mocks.cleanup).toHaveBeenCalledWith("journal", new Set(["photo-asset", "drawing-asset"]));
   });

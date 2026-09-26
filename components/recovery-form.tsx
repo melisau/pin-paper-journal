@@ -6,9 +6,11 @@ import { BookOpen, KeyRound, LockKeyhole } from "lucide-react";
 import { rewrapAccountKeyWithRecovery, type WrappedKey } from "@/lib/crypto";
 import { setAccountMasterKey } from "@/lib/key-vault";
 import { createClient } from "@/lib/supabase/client";
+import { LanguageSwitcher, useLanguage } from "@/components/language-switcher";
 
 export function RecoveryForm() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [recoveryCode, setRecoveryCode] = useState("");
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
@@ -54,18 +56,19 @@ export function RecoveryForm() {
 
   return <main className="auth-screen">
     <section className="auth-paper recovery-page">
+      <LanguageSwitcher/>
       <div className="auth-mark"><BookOpen/><span>PIN & PAPER</span></div>
-      <p className="auth-kicker">Recover your private journal</p>
-      <h1>Choose a new password</h1>
-      <p className="auth-copy">Your recovery code opens the existing encryption key. Your journal content never needs to be sent as readable text.</p>
+      <p className="auth-kicker">{t("Recover your private journal")}</p>
+      <h1>{t("Choose a new password")}</h1>
+      <p className="auth-copy">{t("Your recovery code opens the existing encryption key. Your journal content never needs to be sent as readable text.")}</p>
       <form onSubmit={submit}>
-        <label><span><KeyRound/> Recovery code</span><input type="password" autoComplete="one-time-code" spellCheck={false} required value={recoveryCode} onChange={event => setRecoveryCode(event.target.value)} /></label>
-        <label><span><LockKeyhole/> New password</span><input type="password" minLength={10} autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} /></label>
-        <label><span><LockKeyhole/> Confirm new password</span><input type="password" minLength={10} autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>
-        <button className="auth-submit" disabled={busy}>{busy ? "Securing your journals…" : "Update password & unlock"}</button>
+        <label><span><KeyRound/> {t("Recovery code")}</span><input type="password" autoComplete="one-time-code" spellCheck={false} required value={recoveryCode} onChange={event => setRecoveryCode(event.target.value)} /></label>
+        <label><span><LockKeyhole/> {t("New password")}</span><input type="password" minLength={10} autoComplete="new-password" required value={password} onChange={event => setPassword(event.target.value)} /></label>
+        <label><span><LockKeyhole/> {t("Confirm new password")}</span><input type="password" minLength={10} autoComplete="new-password" required value={confirmation} onChange={event => setConfirmation(event.target.value)} /></label>
+        <button className="auth-submit" disabled={busy}>{t(busy ? "Securing your journals…" : "Update password & unlock")}</button>
       </form>
-      {message && <p className="auth-message" role="status">{message}</p>}
-      <p className="auth-security"><LockKeyhole/> Your recovery code is never stored by Pin & Paper.</p>
+      {message && <p className="auth-message" role="status">{t(message)}</p>}
+      <p className="auth-security"><LockKeyhole/> {t("Your recovery code is never stored by Pin & Paper.")}</p>
     </section>
   </main>;
 }

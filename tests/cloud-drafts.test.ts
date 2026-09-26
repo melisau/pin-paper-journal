@@ -24,4 +24,11 @@ describe("cloud draft queue", () => {
     localStorage.setItem(cloudDraftKey("journal-2"), "not-json");
     expect(readCloudDraft("journal-2")).toBeNull();
   });
+
+  it("reopens encrypted media instead of reusing blob URLs from an old tab", () => {
+    writeCloudDraft("journal-3", [{ ...page, photos: [{ id: 1, src: "blob:expired", assetId: "encrypted-photo", x: 10, y: 10, rotation: 0, framed: false, z: 1, size: 180, shape: "square" }], drawingAssetId: "encrypted-drawing", drawingData: "blob:expired-drawing" }], "Blush", true);
+    const restored = readCloudDraft("journal-3")?.pages[0];
+    expect(restored?.photos[0].src).toBe("");
+    expect(restored?.drawingData).toBe("");
+  });
 });

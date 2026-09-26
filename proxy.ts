@@ -29,4 +29,6 @@ export async function proxy(request: NextRequest) {
   return response;
 }
 
-export const config = { matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"] };
+// Only routes that read a server-side session need token refresh here.
+// The public sign-in page performs its own browser-side session check.
+export const config = { matcher: ["/journal/:path*", "/account/recovery/:path*"] };

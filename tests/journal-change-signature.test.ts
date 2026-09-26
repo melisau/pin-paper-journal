@@ -18,4 +18,10 @@ describe("journalChangeSignature", () => {
   it("changes when editable journal content changes", () => {
     expect(journalChangeSignature([{ ...page, note: "New text" }], "Blush")).not.toBe(journalChangeSignature([page], "Blush"));
   });
+
+  it("tracks photo and sticker locks as editable content", () => {
+    expect(journalChangeSignature([{ ...page, photos: [{ ...page.photos[0], locked: true }] }], "Blush")).not.toBe(journalChangeSignature([page], "Blush"));
+    const sticker = { id: 2, value: "🌼", x: 10, y: 20, rotation: 0 };
+    expect(journalChangeSignature([{ ...page, placed: [{ ...sticker, locked: true }] }], "Blush")).not.toBe(journalChangeSignature([{ ...page, placed: [sticker] }], "Blush"));
+  });
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLanguage } from "@/components/language-switcher";
 
 export type CatalogSticker = { value: string; label: string; category: string; kind?: "sticker" | "tape" };
 
@@ -39,13 +40,14 @@ const TAPES: CatalogSticker[] = [
 ];
 
 export function StickerCatalog({ onAdd }: { onAdd: (item: CatalogSticker) => void }) {
+  const { t } = useLanguage();
   const categories = ["Botanical", "Quotes", "Stamps", "Doodles"];
   const [category, setCategory] = useState(categories[0]);
   const drag = (event: React.DragEvent, item: CatalogSticker) => event.dataTransfer.setData("application/x-journal-sticker", JSON.stringify(item));
   return <div className="sticker-catalog">
-    <div className="catalog-tabs" role="tablist">{categories.map(item => <button key={item} role="tab" aria-selected={category === item} onClick={() => setCategory(item)}>{item}</button>)}</div>
-    <div className={`catalog-grid sticker-grid category-${category.toLowerCase()}`}>{CATALOG.filter(item => item.category === category).map(item => <button key={item.label} draggable onDragStart={event => drag(event, item)} onClick={() => onAdd(item)} title={`${item.label} — drag or tap to add`}><span>{item.value}</span><small>{item.label}</small></button>)}</div>
-    <h3>Washi tapes</h3>
-    <div className="washi-grid">{TAPES.map(item => <button key={item.value} className={`washi-swatch ${item.value}`} draggable onDragStart={event => drag(event, item)} onClick={() => onAdd(item)} aria-label={item.label}/>)}</div>
+    <div className="catalog-tabs" role="tablist">{categories.map(item => <button key={item} role="tab" aria-selected={category === item} onClick={() => setCategory(item)}>{t(item)}</button>)}</div>
+    <div className={`catalog-grid sticker-grid category-${category.toLowerCase()}`}>{CATALOG.filter(item => item.category === category).map(item => <button key={item.label} draggable onDragStart={event => drag(event, item)} onClick={() => onAdd(item)} title={`${t(item.label)} — ${t("drag or tap to add")}`}><span>{item.category === "Quotes" ? t(item.value) : item.value}</span><small>{t(item.label)}</small></button>)}</div>
+    <h3>{t("Washi tapes")}</h3>
+    <div className="washi-grid">{TAPES.map(item => <button key={item.value} className={`washi-swatch ${item.value}`} draggable onDragStart={event => drag(event, item)} onClick={() => onAdd(item)} aria-label={t(item.label)}/>)}</div>
   </div>;
 }

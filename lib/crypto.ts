@@ -11,6 +11,8 @@ function secureCrypto() {
 
 export type EncryptedValue = { ciphertext: string; iv: string; version: 1 };
 export type WrappedKey = EncryptedValue & { salt: string; kdf: "PBKDF2-SHA256"; iterations: number };
+export type FastMasterWrap = EncryptedValue & { kdf: "AES-GCM-MASTER" };
+export type MasterWrappedKey = (WrappedKey & { fast_wrap?: FastMasterWrap }) | FastMasterWrap;
 export type EncryptedBinary = { ciphertext: ArrayBuffer; iv: string; version: 1 };
 
 function bytesToBase64(bytes: Uint8Array) {
@@ -20,8 +22,13 @@ function bytesToBase64(bytes: Uint8Array) {
 }
 
 function base64ToBytes(value: string) {
-  const binary = atob(value);
-  return Uint8Array.from(binary, char => char.charCodeAt(0));
+  if (typeof value !== "string" || !value) throw new Error("Encrypted data is incomplete or invalid.");
+  try {
+    const binary = atob(value);
+    return Uint8Array.from(binary, char => char.charCodeAt(0));
+  } catch {
+    throw new Error("Encrypted data is incomplete or invalid.");
+  }
 }
 
 function asBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -106,10 +113,13 @@ export async function createAccountKeyBundle(password: string) {
 
 export async function createJournalKeyBundle(masterKey: CryptoKey, journalPassword?: string) {
   const journalKey = await generateEncryptionKey();
-  const masterRaw = bytesToBase64(new Uint8Array(await secureCrypto().exportKey("raw", masterKey)));
+  // Keep the legacy wrapper so a previously open client or a rolled-back
+  // deployment can still read this journal. New clients use fast_wrap.
+  const fastWrap = await rewrapJournalKeyForMaster(masterKey, journalKey);
+  const wrappedByMaster = await addLegacyJournalWrap(masterKey, journalKey, fastWrap);
   return {
     journalKey,
-    wrappedByMaster: await wrapKey(journalKey, masterRaw),
+    wrappedByMaster,
     wrappedByPassword: journalPassword ? await wrapKey(journalKey, journalPassword) : null,
   };
 }
@@ -124,9 +134,33 @@ export async function decryptBinary(value: ArrayBuffer, iv: string, key: CryptoK
   return secureCrypto().decrypt({ name: "AES-GCM", iv: asBuffer(base64ToBytes(iv)) }, key, value);
 }
 
-export async function unwrapJournalKey(masterKey: CryptoKey, wrappedKey: WrappedKey) {
+export async function unwrapJournalKey(masterKey: CryptoKey, wrappedKey: MasterWrappedKey) {
+  // A short-lived version stored the fast wrapper as the entire value rather
+  // than nested under fast_wrap. Both shapes must remain readable.
+  const fastWrap = wrappedKey.kdf === "AES-GCM-MASTER" ? wrappedKey : wrappedKey.fast_wrap;
+  if (fastWrap?.kdf === "AES-GCM-MASTER") {
+    const rawKey = await secureCrypto().decrypt(
+      { name: "AES-GCM", iv: asBuffer(base64ToBytes(fastWrap.iv)) },
+      masterKey,
+      asBuffer(base64ToBytes(fastWrap.ciphertext)),
+    );
+    return secureCrypto().importKey("raw", rawKey, "AES-GCM", true, ["encrypt", "decrypt"]);
+  }
+  if (wrappedKey.kdf !== "PBKDF2-SHA256") throw new Error("Encrypted data is incomplete or invalid.");
   const masterRaw = bytesToBase64(new Uint8Array(await secureCrypto().exportKey("raw", masterKey)));
   return unwrapKey(wrappedKey, masterRaw);
+}
+
+export async function rewrapJournalKeyForMaster(masterKey: CryptoKey, journalKey: CryptoKey): Promise<FastMasterWrap> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const rawKey = await secureCrypto().exportKey("raw", journalKey);
+  const ciphertext = await secureCrypto().encrypt({ name: "AES-GCM", iv: asBuffer(iv) }, masterKey, rawKey);
+  return { ciphertext: bytesToBase64(new Uint8Array(ciphertext)), iv: bytesToBase64(iv), version: 1, kdf: "AES-GCM-MASTER" };
+}
+
+export async function addLegacyJournalWrap(masterKey: CryptoKey, journalKey: CryptoKey, fastWrap: FastMasterWrap): Promise<WrappedKey & { fast_wrap: FastMasterWrap }> {
+  const masterRaw = bytesToBase64(new Uint8Array(await secureCrypto().exportKey("raw", masterKey)));
+  return { ...await wrapKey(journalKey, masterRaw), fast_wrap: fastWrap };
 }
 
 export async function rewrapAccountKeyWithRecovery(wrappedByRecovery: WrappedKey, recoveryCode: string, newPassword: string) {

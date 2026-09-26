@@ -1,9 +1,11 @@
-export type Book = { id: string; title: string; tone: string; label: string };
+export const JOURNAL_COVER_IDS = ["journal-1", "journal-2", "journal-3", "journal-4", "journal-5", "journal-6", "journal-7", "journal-8", "journal-9", "journal-10", "journal-11", "journal-12", "journal-13"] as const;
+export type JournalCover = typeof JOURNAL_COVER_IDS[number];
+export type Book = { id: string; title: string; tone: string; label: string; cover?: JournalCover };
 export type PageId = string | number;
-export type Sticker = { id: number; value: string; x: number; y: number; rotation: number; size?: number; z?: number; opacity?: number; kind?: "sticker" | "tape"; category?: string };
-export type Photo = { id: number; src: string; assetId?: string; loadError?: string; x: number; y: number; rotation: number; framed: boolean; z: number; size: number; shape: "square" | "round" | "soft" | "wavy" };
+export type Sticker = { id: number; value: string; x: number; y: number; rotation: number; size?: number; z?: number; opacity?: number; kind?: "sticker" | "tape"; category?: string; locked?: boolean };
+export type Photo = { id: number; src: string; assetId?: string; loadError?: string; x: number; y: number; rotation: number; framed: boolean; z: number; size: number; shape: "square" | "round" | "soft" | "wavy"; locked?: boolean };
 export type Joy = { id: number; text: string; done: boolean };
-export type FreeText = { id: number; text: string; x: number; y: number; rotation: number; size: number; z: number };
+export type FreeText = { id: number; text: string; x: number; y: number; rotation: number; size: number; z: number; locked?: boolean };
 export type JournalTemplate = "free" | "habit" | "mood" | "weekly" | "todo";
 export type TodoItem = { id: number; text: string; done: boolean };
 export type MoodEntry = { marker: string; color: string };
@@ -19,6 +21,7 @@ export type PageData = {
   drawingAssetId?: string;
   joys: Joy[];
   joysVisible: boolean;
+  joyLocked?: boolean;
   joyPosition?: { x: number; y: number };
   joyTitle?: string;
   joyColor?: string;
