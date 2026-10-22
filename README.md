@@ -11,6 +11,8 @@ A Pinterest-inspired digital bullet journal with private accounts, optional jour
 - Every encrypted value uses a fresh 96-bit IV.
 - Recovery codes wrap the account master key separately; readable recovery codes are never stored in Supabase.
 - Uploaded images will be encrypted before being written to the private Storage bucket.
+- Drawing snapshots are compressed to transparent WebP (at most 1600 px / 512 KiB) and stored inside the encrypted page payload. Saving replaces the existing page value instead of creating a new Storage object for every stroke. Legacy drawing objects remain readable.
+- A 250 MiB per-account allowance covers encrypted page payloads plus encrypted Storage files. Page commits and Storage final-size checks use the same account lock. Normal saves do not delete assets needed by another device or offline draft.
 - Never expose a Supabase `service_role` key in this repository or in browser code.
 
 > This is an initial security implementation and should receive an independent security review before handling highly sensitive or regulated information.
@@ -20,6 +22,7 @@ A Pinterest-inspired digital bullet journal with private accounts, optional jour
 1. Install dependencies with `npm install`.
 2. Copy `.env.example` to `.env.local` and add the Supabase project URL and publishable key.
 3. Run `supabase/migrations/001_secure_journal.sql` in the Supabase SQL Editor.
+   Then apply the remaining migrations in order through `005_bounded_drawing_storage.sql`. Do not rerun migrations already applied to an existing project.
 4. In Supabase Auth URL Configuration, set the local site URL to `http://localhost:3000` and add `http://localhost:3000/auth/callback` as a redirect URL.
 5. Start the app with `npm run dev`.
 

@@ -1,0 +1,40 @@
+import { chromium, expect } from "@playwright/test";
+import { mkdir } from "node:fs/promises";
+
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+const errors = [];
+page.on("pageerror", error => errors.push(error.message));
+await mkdir("test-results/themes", { recursive: true });
+try {
+  await page.goto("http://localhost:3000/preview");
+  await expect(page.getByRole("heading", { name: /Your little corner/ })).toBeVisible();
+  await page.getByRole("button", { name: "Light theme", exact: true }).click();
+  await expect(page.locator(".library-screen")).toHaveCSS("background-color", "rgb(238, 243, 236)");
+  await page.evaluate(() => document.fonts.ready);
+  await page.screenshot({ path: "test-results/themes/light-library.png", fullPage: true });
+  await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+  await expect(page.locator(".library-screen")).toHaveCSS("background-color", "rgb(29, 37, 51)");
+  await page.evaluate(() => document.fonts.ready);
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Dark theme", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.screenshot({ path: "test-results/themes/dark-library.png", fullPage: true });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: "Open My August Journal" }).click();
+  await page.getByRole("button", { name: "Write", exact: true }).click();
+  await expect(page.locator(".tool-drawer")).toBeVisible();
+  const paper = page.locator(".journal-page");
+  const before = await paper.evaluate(el => getComputedStyle(el).backgroundColor);
+  await page.getByRole("button", { name: "Light theme", exact: true }).click();
+  expect(await paper.evaluate(el => getComputedStyle(el).backgroundColor)).toBe(before);
+  await page.getByRole("button", { name: "Dark theme", exact: true }).click();
+  await expect(page.locator(".tool-drawer")).toHaveCSS("background-color", "rgb(42, 53, 69)");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({ path: "test-results/themes/dark-mobile-editor.png", fullPage: true });
+  await page.goto("http://localhost:3000/?auth=session");
+  await expect(page.getByRole("button", { name: "Dark theme", exact: true })).toBeVisible();
+  await expect(page.locator(".auth-screen")).toHaveCSS("background-color", "rgb(29, 37, 51)");
+  await page.screenshot({ path: "test-results/themes/dark-mobile-auth.png", fullPage: true });
+  expect(errors).toEqual([]);
+  console.log("PASS: desktop/mobile theme controls, reload persistence, paper preservation, auth theme, no horizontal overflow or runtime errors.");
+} finally { await browser.close(); }

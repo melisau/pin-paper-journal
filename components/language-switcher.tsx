@@ -2,6 +2,7 @@
 
 import { useEffect, useSyncExternalStore } from "react";
 import { LANGUAGE_STORAGE_KEY, translate, type Language } from "@/lib/i18n";
+import { ThemeSwitcher } from "@/components/theme-switcher";
 
 const EVENT_NAME = "pin-paper-language-change";
 
@@ -33,5 +34,6 @@ export function LanguageSwitcher({ className = "" }: { className?: string }) {
   return <div className={`language-switcher ${className}`} role="group" aria-label={t("Language")}>
     <button type="button" lang="en" aria-pressed={language === "en"} onClick={() => setLanguage("en")}>EN</button>
     <button type="button" lang="tr" aria-pressed={language === "tr"} onClick={() => setLanguage("tr")}>TR</button>
+    <ThemeSwitcher language={language}/>
   </div>;
 }

@@ -1,0 +1,116 @@
+/* App chrome only: user-selected paper, ink, covers and decorations retain their colors. */
+.sync-conflict-actions { position:relative; z-index:90; display:flex; flex-wrap:wrap; justify-content:center; align-items:center; gap:10px; padding:12px 18px; background:var(--card); color:var(--foreground); border-bottom:1px solid var(--border); font:13px/1.5 var(--brand-ui); }
+.sync-conflict-actions button { min-height:44px; padding:10px 16px; border:0; border-radius:12px; background:var(--primary); color:var(--primary-foreground); cursor:pointer; }
+.sync-conflict-actions button:disabled { opacity:.6; cursor:wait; }
+:root {
+  color-scheme: light;
+  --background: #eef3ec; --foreground: #24362d;
+  --card: #fbfcf7; --card-foreground: #24362d;
+  --primary: #345c4b; --primary-foreground: #fff;
+  --secondary: #e3ecdf; --secondary-foreground: #24362d;
+  --muted: #e3ecdf; --muted-foreground: #54685b;
+  --accent: #b8cbb6; --accent-foreground: #24362d;
+  --border: #bacbbb; --input: #bacbbb; --ring: #345c4b;
+  --destructive: #a83d3d;
+  --brand-heading: var(--font-lora), Georgia, serif;
+  --brand-ui: var(--font-dm-sans), Arial, sans-serif;
+  --desk: #e4ebdf; --dot: #345c4b14; --rail: #345c4b;
+  --rail-ink: #fbfcf7; --chrome-shadow: #24362d18;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #1d2533; --foreground: #f5efe4;
+  --card: #2a3545; --card-foreground: #f5efe4;
+  --primary: #d9ba83; --primary-foreground: #1d2533;
+  --secondary: #344154; --secondary-foreground: #f5efe4;
+  --muted: #344154; --muted-foreground: #c2cad5;
+  --accent: #b9aecf; --accent-foreground: #1d2533;
+  --border: #536174; --input: #536174; --ring: #d9ba83;
+  --destructive: #ffaaaa;
+  --brand-heading: var(--font-fraunces), Georgia, serif;
+  --brand-ui: var(--font-inter), Arial, sans-serif;
+  --desk: #18212e; --dot: #d9ba8314; --rail: #2a3545;
+  --rail-ink: #f5efe4; --chrome-shadow: #00000040;
+}
+body { background: var(--background); color: var(--foreground); font-family: var(--brand-ui); }
+main, .library-screen, .auth-screen, .error-screen {
+  background-color: var(--background); color: var(--foreground);
+  background-image: radial-gradient(var(--dot) .8px, transparent .8px);
+  background-size: 16px 16px;
+}
+.desk-screen { background-color: var(--desk); }
+.library-copy h1, .auth-paper h1, .error-paper h1, .empty-library h2 {
+  font-family: var(--brand-heading); color: var(--foreground); font-weight: 500;
+}
+.library-copy h1 { line-height: 1.08; letter-spacing: -.035em; }
+.library-copy p, .eyebrow, .library-hint, .hint, .auth-copy, .auth-kicker, .auth-security, .header-note { color: var(--muted-foreground); }
+.library-copy p { font-family: var(--brand-heading); }
+.eyebrow, .auth-mark { color: var(--primary); font-family: var(--brand-ui); }
+.auth-paper, .error-paper, .tool-drawer, .page-finder, .migration-card, .recovery-card {
+  background: var(--card); color: var(--foreground); border-color: var(--border);
+  box-shadow: 0 12px 32px var(--chrome-shadow);
+}
+.auth-paper { border-radius: 20px; }
+.auth-paper:before { background: var(--accent); opacity: .75; }
+.auth-paper input, .compact-controls select, .tool-drawer select, .tool-drawer input:not([type="color"]):not([type="range"]):not([type="checkbox"]), .page-finder>input {
+  background-color: var(--background); color: var(--foreground); border-color: var(--input); font-family: var(--brand-ui);
+}
+.auth-paper input:focus { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring), transparent 80%); }
+.auth-paper form .security-mode, .auth-link, .auth-switch, .toolbox p, .tool-drawer h2, .tool-drawer label, .drawer-close, .clear-button { color: var(--muted-foreground); }
+.auth-submit, .recovery-card button, .backup-actions button.active, .empty-library>button {
+  background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); font-family: var(--brand-ui);
+}
+.auth-message, .library-notice, .storage-usage, .migration-card { background: var(--card); color: var(--foreground); border-color: var(--border); }
+.library-notice { font-family: var(--brand-heading); }
+.backup-actions button, .backup-actions label, .language-switcher, .appearance-action, .book-actions, .book-actions button, .shelf-scroll-button {
+  background: var(--card); color: var(--foreground); border-color: var(--border); font-family: var(--brand-ui);
+}
+.backup-action-text { font: 500 11px/1.25 var(--brand-ui); }
+.backup-actions button:hover, .backup-actions label:hover { border-color: var(--primary); }
+.new-journal-card { background: transparent; border-color: var(--border); color: var(--foreground); }
+.new-journal-card strong { font-family: var(--brand-heading); }
+.new-journal-icon { background: var(--card); color: var(--primary); border-color: var(--border); }
+.new-journal-caption { color: var(--muted-foreground); }
+.desk-screen .topbar { background: var(--card); color: var(--foreground); box-shadow: 0 4px 15px var(--chrome-shadow); }
+.back-library, .page-nav, .page-nav button, .page-label-button, .desktop-reading-toggle, .topbar>.page-nav>.mobile-reading-toggle {
+  color: var(--foreground); font-family: var(--brand-ui);
+}
+.topbar>.page-nav>.mobile-reading-toggle, .page-label-button, .page-label-popover { background: var(--card); border-color: var(--border); color: var(--foreground); }
+.desk-screen .save-button {
+  background: var(--primary)!important; color: var(--primary-foreground)!important;
+  box-shadow: 0 3px 0 color-mix(in srgb, var(--primary), #000 20%); font-family: var(--brand-ui);
+}
+.tool-rail { background: var(--rail); box-shadow: 0 6px 20px var(--chrome-shadow); }
+.tool-rail button { color: var(--rail-ink); font-family: var(--brand-ui); }
+.tool-rail button.active { background: var(--primary); color: var(--primary-foreground); }
+:root:not([data-theme="dark"]) .tool-rail button.active { background: var(--card); color: var(--primary); }
+.toolbox .tape { background: var(--secondary); color: var(--muted-foreground); }
+.tool-drawer button:not(.swatches button):not(.washi-grid button):not(.paper-color-presets button), .page-finder button {
+  color: var(--foreground); border-color: var(--border); font-family: var(--brand-ui);
+}
+.tool-drawer .sticker-grid button, .tool-drawer .sticker-tabs button, .page-finder button { background-color: var(--secondary); }
+.page-finder button.active, .tool-drawer button.active:not(.swatches button):not(.paper-color-presets button) { background-color: var(--primary); color: var(--primary-foreground); }
+.tool-drawer .upload { background: var(--secondary); color: var(--foreground); border-color: var(--primary); }
+.language-switcher button { color: var(--foreground); font-family: var(--brand-ui); }
+.language-switcher button[aria-pressed="true"] { background: var(--primary); color: var(--primary-foreground); }
+.theme-switcher { display: inline-flex; gap: 2px; border-left: 1px solid var(--border); padding-left: 5px; margin-left: 5px; }
+.page-label-details summary { background: var(--card); color: var(--foreground); box-shadow: inset 0 0 0 1px var(--border); }
+.page-label-popover time, .page-label-popover small, .tool-write .language-setting { color: var(--muted-foreground); }
+.tool-drawer .lock-selected-action { background: var(--secondary); color: var(--foreground); border-color: var(--border); }
+.tool-drawer .lock-selected-action span { color: var(--muted-foreground); }
+.new-journal-card:hover { background: color-mix(in srgb, var(--card), transparent 35%); border-color: var(--primary); }
+.language-switcher .theme-switcher button { display: inline-flex; align-items: center; justify-content: center; min-width: 36px; min-height: 36px; }
+@media(pointer:coarse) {
+  .language-switcher button { min-width: 40px; min-height: 44px; }
+  .language-switcher .theme-switcher button { min-width: 44px; min-height: 44px; }
+}
+@media(max-width:540px) {
+  .auth-paper>.language-switcher { position: static; display: flex; width: max-content; margin: 0 0 20px auto; }
+}
+button:focus-visible, label:has(input:focus-visible) { outline: 2px solid var(--ring); outline-offset: 3px; }
+/* Native form widgets inside the notebook must follow its paper, not the app theme. */
+.journal-page, .companion-page { color-scheme: light; }
+.journal-page.paper-dark, .companion-page.paper-dark { color-scheme: dark; }
+@media(prefers-reduced-motion:no-preference) {
+  .library-screen, .auth-screen, .desk-screen, .topbar, .tool-rail, .tool-drawer { transition: background-color .18s ease, color .18s ease; }
+}

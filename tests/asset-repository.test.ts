@@ -15,7 +15,7 @@ vi.mock("@/lib/supabase/client", () => ({ createClient: () => ({
   }),
 }) }));
 
-import { cleanupUnreferencedAssets, loadEncryptedAsset, retryAssetOperation, revokeAllEncryptedAssetUrls, revokeEncryptedAssetUrl, uploadEncryptedAsset } from "@/lib/asset-repository";
+import { loadEncryptedAsset, retryAssetOperation, revokeAllEncryptedAssetUrls, revokeEncryptedAssetUrl, uploadEncryptedAsset } from "@/lib/asset-repository";
 
 beforeAll(() => {
   Object.defineProperty(globalThis, "crypto", { configurable: true, value: webcrypto });
@@ -66,13 +66,6 @@ describe("encrypted asset storage", () => {
     await expect(result).resolves.toBe("uploaded");
     expect(operation).toHaveBeenCalledTimes(3);
     vi.useRealTimers();
-  });
-
-  it("deletes only assets no longer referenced by any page", async () => {
-    mocks.selectEq.mockResolvedValue({ data: [{ id: "keep", storage_path: "keep.bin" }, { id: "remove", storage_path: "remove.bin" }], error: null });
-    await cleanupUnreferencedAssets("journal", new Set(["keep"]));
-    expect(mocks.remove).toHaveBeenCalledWith(["remove.bin"]);
-    expect(mocks.deleteIn).toHaveBeenCalledWith("id", ["remove"]);
   });
 
   it("revokes decrypted object URLs individually and on final cleanup", async () => {

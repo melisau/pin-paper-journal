@@ -15,8 +15,8 @@ type EncryptedCloudDraft = {
 
 type DraftPayload = { journalId: string; document: JournalDocument };
 
-export function cloudDraftKey(journalId: string) {
-  return `${PREFIX}${journalId}`;
+export function cloudDraftKey(journalId: string, slot?: string) {
+  return `${PREFIX}${journalId}${slot ? `:${slot}` : ""}`;
 }
 
 function isJournalDocument(value: unknown): value is JournalDocument {
@@ -38,11 +38,22 @@ function normalizeDocument(document: JournalDocument): JournalDocument {
   };
 }
 
-export async function readCloudDraft(journalId: string, key: CryptoKey): Promise<JournalDocument | null> {
+export async function readCloudDraft(journalId: string, key: CryptoKey, slot?: string): Promise<JournalDocument | null> {
+  if (slot === undefined) {
+    const prefix = `${cloudDraftKey(journalId)}:`;
+    const slots: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const name = localStorage.key(i);
+      if (name?.startsWith(prefix)) slots.push(name.slice(prefix.length));
+    }
+    const candidates = await Promise.all(["", ...slots].map(id => readCloudDraft(journalId, key, id)));
+    return candidates.filter((draft): draft is JournalDocument => draft !== null)
+      .sort((a, b) => Number(Boolean(b.pendingSync)) - Number(Boolean(a.pendingSync)) || b.updatedAt.localeCompare(a.updatedAt))[0] ?? null;
+  }
   let raw: string;
   let value: unknown;
   try {
-    const stored = localStorage.getItem(cloudDraftKey(journalId));
+    const stored = localStorage.getItem(cloudDraftKey(journalId, slot));
     if (!stored) return null;
     raw = stored;
     value = JSON.parse(stored) as unknown;
@@ -56,7 +67,7 @@ export async function readCloudDraft(journalId: string, key: CryptoKey): Promise
     try {
       const payload = await decryptJson<DraftPayload>(envelope.payload, key);
       if (payload.journalId !== journalId || !isJournalDocument(payload.document) || payload.document.pendingSync !== envelope.pendingSync) return null;
-      return normalizeDocument(payload.document);
+      return { ...normalizeDocument(payload.document), draftSlot: slot };
     } catch {
       // Never fall back to treating failed ciphertext as readable journal data.
       return null;
@@ -68,28 +79,28 @@ export async function readCloudDraft(journalId: string, key: CryptoKey): Promise
   // the browser cannot perform secure encryption.
   if (isJournalDocument(value)) {
     const document = normalizeDocument(value);
-    const migrated = await storeCloudDraft(journalId, document, Boolean(document.pendingSync), key, raw);
-    return migrated ?? readCloudDraft(journalId, key);
+    const migrated = await storeCloudDraft(journalId, document, Boolean(document.pendingSync), key, raw, slot);
+    return migrated ? { ...migrated, draftSlot: slot } : readCloudDraft(journalId, key, slot);
   }
   return null;
 }
 
-async function storeCloudDraft(journalId: string, document: JournalDocument, pendingSync: boolean, key: CryptoKey, expectedRaw?: string): Promise<JournalDocument | null> {
+async function storeCloudDraft(journalId: string, document: JournalDocument, pendingSync: boolean, key: CryptoKey, expectedRaw?: string, slot?: string): Promise<JournalDocument | null> {
   const encryptedDocument = { ...document, pendingSync };
   const payload = await encryptJson<DraftPayload>({ journalId, document: encryptedDocument }, key);
   const envelope: EncryptedCloudDraft = { format: FORMAT, version: FORMAT_VERSION, pendingSync, payload };
-  const storageKey = cloudDraftKey(journalId);
+  const storageKey = cloudDraftKey(journalId, slot);
   if (expectedRaw !== undefined && localStorage.getItem(storageKey) !== expectedRaw) return null;
   localStorage.setItem(storageKey, JSON.stringify(envelope));
   return encryptedDocument;
 }
 
-export function writeCloudDraft(journalId: string, pages: PageData[], theme: string, pendingSync: boolean, key: CryptoKey) {
-  const document: JournalDocument = { version: 2, pages, theme, updatedAt: new Date().toISOString(), pendingSync };
-  const storageKey = cloudDraftKey(journalId);
+export function writeCloudDraft(journalId: string, pages: PageData[], theme: string, pendingSync: boolean, key: CryptoKey, baseRevision?: number, slot?: string) {
+  const document: JournalDocument = { version: 2, pages, theme, updatedAt: new Date().toISOString(), pendingSync, baseRevision, draftToken: crypto.randomUUID() };
+  const storageKey = cloudDraftKey(journalId, slot);
   const previous = writeQueues.get(storageKey) ?? Promise.resolve();
   const write = previous.catch(() => undefined).then(async () => {
-    const stored = await storeCloudDraft(journalId, document, pendingSync, key);
+    const stored = await storeCloudDraft(journalId, document, pendingSync, key, undefined, slot);
     if (!stored) throw new Error("The encrypted draft could not be saved.");
     return stored;
   });
@@ -97,8 +108,21 @@ export function writeCloudDraft(journalId: string, pages: PageData[], theme: str
   return write;
 }
 
-export function markCloudDraftSynced(journalId: string, pages: PageData[], theme: string, key: CryptoKey) {
-  return writeCloudDraft(journalId, pages, theme, false, key);
+export async function markCloudDraftSynced(journalId: string, pages: PageData[], theme: string, key: CryptoKey, baseRevision?: number, slot?: string, expectedToken?: string) {
+  const storageKey = cloudDraftKey(journalId, slot);
+  await writeQueues.get(storageKey);
+  const raw = localStorage.getItem(storageKey);
+  if (expectedToken && (await readCloudDraft(journalId, key, slot ?? ""))?.draftToken !== expectedToken) return null;
+  // Compare the ciphertext again after encryption, so a late response cannot
+  // clear newer pending edits, even if another writer changed this slot.
+  return storeCloudDraft(journalId, { version: 2, pages, theme, updatedAt: new Date().toISOString(), baseRevision, draftToken: crypto.randomUUID() }, false, key, raw ?? undefined, slot);
+}
+
+export async function acknowledgeRecoveredDraft(journalId: string, key: CryptoKey, recovered: JournalDocument) {
+  const storageKey = cloudDraftKey(journalId, recovered.draftSlot);
+  const raw = localStorage.getItem(storageKey);
+  const latest = await readCloudDraft(journalId, key, recovered.draftSlot ?? "");
+  if (latest && latest.updatedAt === recovered.updatedAt && latest.draftToken === recovered.draftToken && localStorage.getItem(storageKey) === raw) localStorage.removeItem(storageKey);
 }
 
 export async function hasPendingCloudDraft(journalId: string, key: CryptoKey) {

@@ -1,5 +1,6 @@
 import { decryptBinary, decryptJson, encryptBinary, encryptJson, type EncryptedValue } from "@/lib/crypto";
 import { createClient } from "@/lib/supabase/client";
+import { JournalStorageLimitError } from "@/lib/storage-errors";
 
 const BUCKET = "encrypted-journal-assets";
 const pendingUploads = new Map<string, Promise<string>>();
@@ -32,6 +33,7 @@ async function cacheEncryptedAsset(asset:CachedAsset) {
 }
 
 function fail(error: { message: string } | null) {
+  if (error?.message.includes("encrypted_storage_quota_exceeded")) throw new JournalStorageLimitError();
   if (error) throw new Error(error.message);
 }
 
@@ -45,6 +47,7 @@ export async function retryAssetOperation<T>(operation: () => Promise<T>, attemp
     try {
       return await operation();
     } catch (error) {
+      if (error instanceof JournalStorageLimitError) throw error;
       lastError = error;
       if (attempt === attempts) break;
       await wait(250 * 2 ** (attempt - 1));
@@ -147,16 +150,6 @@ export function revokeAllEncryptedAssetUrls() {
   managedObjectUrls.clear();
 }
 
-export async function cleanupUnreferencedAssets(journalId: string, referencedIds: Set<string>) {
-  const supabase = createClient();
-  const { data, error } = await supabase.from("encrypted_assets").select("id, storage_path").eq("journal_id", journalId);
-  fail(error);
-  const unused = (data ?? []).filter(asset => !referencedIds.has(asset.id));
-  if (!unused.length) return;
-  const { error: storageError } = await supabase.storage.from(BUCKET).remove(unused.map(asset => asset.storage_path));
-  fail(storageError);
-  const { error: rowsError } = await supabase.from("encrypted_assets").delete().in("id", unused.map(asset => asset.id));
-  fail(rowsError);
-  const unusedIds = new Set(unused.map(asset => asset.id));
-  for (const [key, id] of knownUploads) if (unusedIds.has(id)) knownUploads.delete(key);
-}
+// Media is immutable and retained while its journal exists. Because page
+// references are encrypted, an individual tab cannot safely garbage-collect
+// assets uploaded by another tab or needed by a conflicting offline draft.

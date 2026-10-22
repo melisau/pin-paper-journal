@@ -109,11 +109,13 @@ export async function deleteEncryptedJournal(id: string) {
   const { data: assets, error: assetError } = await supabase.from("encrypted_assets").select("storage_path").eq("journal_id", id);
   message(assetError);
   const paths = (assets ?? []).map(asset => asset.storage_path);
+  // Storage deletion is allowed only after the journal is gone; stale saves
+  // must never be able to remove another writer's media.
+  const { error } = await supabase.from("journals").delete().eq("id", id);
+  message(error);
+  clearJournalKey(id);
   if (paths.length) {
     const { error: storageError } = await supabase.storage.from("encrypted-journal-assets").remove(paths);
     message(storageError);
   }
-  const { error } = await supabase.from("journals").delete().eq("id", id);
-  message(error);
-  clearJournalKey(id);
 }

@@ -3,6 +3,20 @@ export type Language = "en" | "tr";
 export const LANGUAGE_STORAGE_KEY = "pin-paper-language";
 
 const turkish: Record<string, string> = {
+  "Your encrypted storage is full (250 MB). Remove unused journals or reduce page content before adding more images.": "Şifreli depolaman dolu (250 MB). Yeni görsel eklemeden önce kullanmadığın defterleri kaldır veya sayfa içeriğini azalt.",
+  "This page is too large to save. Move some content to another page and try again.": "Bu sayfa kaydedilemeyecek kadar büyük. İçeriğin bir kısmını başka sayfaya taşı ve yeniden dene.",
+  "This drawing is too large to save. Keep this page open and simplify the drawing.": "Bu çizim kaydedilemeyecek kadar büyük. Sayfayı açık tut ve çizimi sadeleştir.",
+  "Drawing compression is unavailable in this browser.": "Bu tarayıcıda çizim sıkıştırma kullanılamıyor.",
+  "This drawing format could not be saved safely.": "Bu çizim biçimi güvenli şekilde kaydedilemedi.",
+  "The drawing could not be saved.": "Çizim kaydedilemedi.",
+  "This journal changed on another device or tab. Your draft is safe here. Save it as a separate journal to keep both versions.": "Bu defter başka bir cihazda veya sekmede değişti. Taslağın bu cihazda güvende. İki sürümü de korumak için taslağını ayrı bir defter olarak kaydet.",
+  "Keep both versions": "İki sürümü de koru",
+  "Save draft as a separate journal": "Taslağı ayrı defter olarak kaydet",
+  "Saving separate copy…": "Ayrı kopya kaydediliyor…",
+  "Separate copy": "Ayrı kopya",
+  "The other device's version will stay unchanged.": "Diğer cihazdaki sürüm korunacak.",
+  "The separate copy could not be completed because some images are unavailable. Your original draft is still safe.": "Bazı görseller açılamadığı için ayrı kopya tamamlanamadı. Asıl taslağın güvende.",
+  "The separate copy could not be saved. Your draft is still safe.": "Ayrı kopya kaydedilemedi. Taslağın güvende.",
   "Let's try that again": "Yeniden deneyelim",
   "We couldn't verify your sign-in right now. Please try again.": "Oturumun şu anda doğrulanamadı. Lütfen yeniden dene.",
   "Sign in again": "Yeniden giriş yap",

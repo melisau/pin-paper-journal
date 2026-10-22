@@ -36,7 +36,7 @@ describe("encrypted page sync", () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mocks.key = await generateEncryptionKey();
-    mocks.rpc.mockResolvedValue({ error: null });
+    mocks.rpc.mockImplementation(async (name: string, args: { p_expected_revision?: number }) => name === "load_encrypted_journal_snapshot" ? { data: { revision: 4, pages: mocks.rows }, error: null } : { data: args.p_expected_revision! + 1, error: null });
     mocks.cleanup.mockResolvedValue(undefined);
     mocks.rows = [];
   });
@@ -75,30 +75,61 @@ describe("encrypted page sync", () => {
 
   it("sends ordered encrypted records and removes pages absent from the batch through the RPC", async () => {
     const pages = [makePage(1, "Second"), makePage(2, "First")];
-    const result = await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages });
+    const result = await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages, expectedRevision: 4 });
     const [, args] = mocks.rpc.mock.calls[0];
 
     expect(mocks.rpc).toHaveBeenCalledWith("sync_encrypted_pages", expect.any(Object));
     expect(args.p_pages.map((record: { position: number }) => record.position)).toEqual([0, 1]);
     expect(JSON.stringify(args.p_pages)).not.toContain("Second secret");
     await expect(decryptJson(args.p_pages[0].encrypted_payload, mocks.key!)).resolves.toMatchObject({ title: "Second", note: "Second secret" });
-    expect(result.every(page => typeof page.id === "string")).toBe(true);
-    expect(mocks.cleanup).toHaveBeenCalledWith("journal", new Set());
+    expect(result.pages.every(page => typeof page.id === "string")).toBe(true);
+    expect(result.revision).toBe(5);
+    expect(args.p_expected_revision).toBe(4);
+    expect(mocks.cleanup).not.toHaveBeenCalled();
   });
 
-  it("uploads photos and drawings, persists only asset references, and reports progress", async () => {
-    mocks.upload.mockResolvedValueOnce("photo-asset").mockResolvedValueOnce("drawing-asset");
+  it("uploads photos only and keeps the bounded drawing inside the encrypted page", async () => {
+    mocks.upload.mockResolvedValueOnce("photo-asset");
     const page = makePage(1, "Media");
     page.photos = [{ id: 1, src: "data:image/jpeg;base64,plain", x: 0, y: 0, rotation: 0, framed: false, z: 1, size: 100, shape: "square", locked: true }];
     page.drawingData = "data:image/png;base64,drawing";
     const progress = vi.fn();
 
-    await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages: [page], onAssetProgress: progress });
+    await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages: [page], expectedRevision: 0, onAssetProgress: progress });
     const payload = await decryptJson<Record<string, unknown>>(mocks.rpc.mock.calls[0][1].p_pages[0].encrypted_payload, mocks.key!);
-    expect(payload).not.toHaveProperty("drawingData");
-    expect(JSON.stringify(payload)).not.toContain("base64");
-    expect(payload).toMatchObject({ drawingAssetId: "drawing-asset", photos: [{ assetId: "photo-asset", locked: true }] });
-    expect(progress.mock.calls).toEqual([[0, 2], [1, 2], [2, 2]]);
-    expect(mocks.cleanup).toHaveBeenCalledWith("journal", new Set(["photo-asset", "drawing-asset"]));
+    expect(payload).toMatchObject({ drawingData: page.drawingData, photos: [{ assetId: "photo-asset", locked: true }] });
+    expect(payload).not.toHaveProperty("drawingAssetId");
+    expect(JSON.stringify(mocks.rpc.mock.calls[0][1])).not.toContain("data:image");
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    expect(progress.mock.calls).toEqual([[0, 1], [1, 1]]);
+    expect(mocks.cleanup).not.toHaveBeenCalled();
+  });
+  it("rejects a stale save without deleting any assets", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { message: "journal_revision_conflict" } });
+    await expect(syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages: [makePage(1, "Offline")], expectedRevision: 0 })).rejects.toMatchObject({ name: "JournalSyncConflictError" });
+    expect(mocks.cleanup).not.toHaveBeenCalled();
+  });
+  it("fails closed before uploading if the draft has no known base revision", async () => {
+    await expect(syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages: [], expectedRevision: undefined as unknown as number })).rejects.toMatchObject({ name: "JournalSyncConflictError" });
+    expect(mocks.rpc).not.toHaveBeenCalled();
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
+  it("preserves an unloaded drawing reference during an unrelated text edit", async () => {
+    const page = { ...makePage(1, "Text edit"), drawingAssetId: "still-loading" };
+    await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages: [page], expectedRevision: 0 });
+    await expect(decryptJson(mocks.rpc.mock.calls[0][1].p_pages[0].encrypted_payload, mocks.key!)).resolves.toMatchObject({ drawingAssetId: "still-loading" });
+  });
+  it("does not create Storage files across repeated drawing edits and reopens the latest inline drawing", async () => {
+    const page = makePage("14ca2633-3490-48b2-90f5-5d53a537a27e", "Sketch");
+    for (let revision = 0; revision < 15; revision++) {
+      page.drawingData = `data:image/webp;base64,${btoa(`stroke-${revision}`)}`;
+      await syncEncryptedPages({ userId: "user", journalId: "journal", masterKey: {} as CryptoKey, pages: [page], expectedRevision: revision });
+    }
+    expect(mocks.upload).not.toHaveBeenCalled();
+    const last = mocks.rpc.mock.calls.at(-1)![1].p_pages[0];
+    mocks.rows = [{ ...last, updated_at: "2026-10-22T00:00:00Z" }];
+    const restored = await loadEncryptedPages({} as CryptoKey, "journal");
+    expect(restored.pages[0].drawingData).toBe(page.drawingData);
+    expect(restored.pages[0].drawingAssetId).toBeUndefined();
   });
 });

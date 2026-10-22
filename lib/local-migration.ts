@@ -1,6 +1,6 @@
 import { createEncryptedJournal } from "@/lib/journal-repository";
 import type { Book, PageData } from "@/lib/journal-model";
-import { syncEncryptedPages } from "@/lib/page-repository";
+import { loadEncryptedPages, syncEncryptedPages } from "@/lib/page-repository";
 
 const BOOKS_KEY = "pin-paper-journal-books";
 const LEDGER_KEY = "pin-paper-cloud-migration-v1";
@@ -105,7 +105,8 @@ export async function migrateLocalJournals(options: { userId: string; masterKey:
     } else {
       cloudBook = { ...source.book, id: cloudId };
     }
-    await syncEncryptedPages({ userId: options.userId, journalId: cloudId, masterKey: options.masterKey, pages: source.pages });
+    const { revision } = await loadEncryptedPages(options.masterKey, cloudId);
+    await syncEncryptedPages({ userId: options.userId, journalId: cloudId, masterKey: options.masterKey, pages: source.pages, expectedRevision: revision });
     ledger[source.book.id] = { cloudId, complete: true };
     writeLedger(ledger);
     migrated.push(cloudBook);

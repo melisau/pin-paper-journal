@@ -43,4 +43,4 @@ export type PageData = {
   textColor: string;
 };
 
-export type JournalDocument = { version: 2; pages: PageData[]; theme: string; updatedAt: string; pendingSync?: boolean };
+export type JournalDocument = { version: 2; pages: PageData[]; theme: string; updatedAt: string; pendingSync?: boolean; baseRevision?: number; draftToken?: string; draftSlot?: string };

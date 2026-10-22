@@ -62,7 +62,7 @@ export async function importCloudBackup(options: { backup: JournalBackup; userId
       photos: (page.photos ?? []).map(photo => ({ ...photo, assetId: undefined })),
       drawingAssetId: undefined,
     }));
-    await syncEncryptedPages({ userId: options.userId, journalId: book.id, masterKey: options.masterKey, pages });
+    await syncEncryptedPages({ userId: options.userId, journalId: book.id, masterKey: options.masterKey, pages, expectedRevision: 0 });
     imported.push(book);
   }
   return imported;

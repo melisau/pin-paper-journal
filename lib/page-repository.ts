@@ -1,18 +1,25 @@
-import { cleanupUnreferencedAssets, loadEncryptedAsset, uploadEncryptedAsset } from "@/lib/asset-repository";
+import { loadEncryptedAsset, uploadEncryptedAsset } from "@/lib/asset-repository";
 import { decryptJson, encryptJson, type EncryptedValue } from "@/lib/crypto";
 import { getEncryptedJournalKey } from "@/lib/journal-repository";
 import type { PageData } from "@/lib/journal-model";
 import { createClient } from "@/lib/supabase/client";
+import { JournalSyncConflictError, validRevision } from "@/lib/sync-conflict";
+import { prepareInlineDrawing } from "@/lib/drawing-storage";
+import { JournalStorageLimitError } from "@/lib/storage-errors";
 
 type PageRow = { id: string; encrypted_payload: EncryptedValue; position: number; updated_at: string };
 type PersistedPhoto = Omit<PageData["photos"][number], "src" | "loadError"> & { src?: never; loadError?: never };
 type PersistedPage = Omit<PageData, "id" | "photos" | "drawingData"> & {
   photos: PersistedPhoto[];
+  drawingData?: string;
   drawingAssetId?: string;
 };
 
 function fail(error: { message: string } | null) {
-  if (error) throw new Error(error.message.includes("sync_encrypted_pages") ? "Apply supabase/migrations/002_sync_encrypted_pages.sql before syncing pages." : error.message);
+  if (error?.message.includes("encrypted_storage_quota_exceeded")) throw new JournalStorageLimitError();
+  if (error?.message.includes("encrypted_page_too_large")) throw new JournalStorageLimitError("This page is too large to save. Move some content to another page and try again.");
+  if (error?.message.includes("journal_revision_conflict")) throw new JournalSyncConflictError();
+  if (error) throw new Error(/sync_encrypted_pages|load_encrypted_journal_snapshot/.test(error.message) ? "Apply supabase/migrations/004_versioned_page_sync.sql before syncing pages." : error.message);
 }
 
 function pageUuid(id: string | number) {
@@ -21,13 +28,10 @@ function pageUuid(id: string | number) {
 
 export async function loadEncryptedPages(masterKey: CryptoKey, journalId: string) {
   const journalKey = await getEncryptedJournalKey(masterKey, journalId);
-  const { data, error } = await createClient()
-    .from("pages")
-    .select("id, encrypted_payload, position, updated_at")
-    .eq("journal_id", journalId)
-    .order("position", { ascending: true });
+  const { data, error } = await createClient().rpc("load_encrypted_journal_snapshot", { p_journal_id: journalId });
   fail(error);
-  const rows = (data ?? []) as PageRow[];
+  if (!data || !validRevision(data.revision) || !Array.isArray(data.pages)) throw new Error("The journal snapshot could not be loaded safely.");
+  const rows = data.pages as PageRow[];
 
   const pages: PageData[] = [];
   for (const row of rows) {
@@ -37,9 +41,9 @@ export async function loadEncryptedPages(masterKey: CryptoKey, journalId: string
       src: "",
       loadError: photo.assetId ? undefined : "This photo has no encrypted asset reference.",
     }));
-    pages.push({ ...payload, id: row.id, photos, drawingData: "" } satisfies PageData);
+    pages.push({ ...payload, id: row.id, photos, drawingData: payload.drawingData || "" } satisfies PageData);
   }
-  return { pages, updatedAt: rows.reduce((latest, row) => row.updated_at > latest ? row.updated_at : latest, "") };
+  return { pages, revision: data.revision as number, updatedAt: rows.reduce((latest, row) => row.updated_at > latest ? row.updated_at : latest, "") };
 }
 
 /** Opens only one page's media. Call this for the visible page(s), not the whole journal. */
@@ -84,14 +88,15 @@ export async function syncEncryptedPages(options: {
   journalId: string;
   masterKey: CryptoKey;
   pages: PageData[];
+  expectedRevision: number;
   onAssetProgress?: (completed: number, total: number) => void;
 }) {
   const { userId, journalId, masterKey } = options;
+  if (!validRevision(options.expectedRevision)) throw new JournalSyncConflictError();
   const journalKey = await getEncryptedJournalKey(masterKey, journalId);
-  const referencedIds = new Set<string>();
   const runtimePages: PageData[] = [];
   const records: Array<{ id: string; position: number; encrypted_payload: EncryptedValue }> = [];
-  const totalAssets = options.pages.reduce((total, page) => total + page.photos.filter(photo => !photo.assetId).length + (page.drawingData && !page.drawingAssetId ? 1 : 0), 0);
+  const totalAssets = options.pages.reduce((total, page) => total + page.photos.filter(photo => !photo.assetId).length, 0);
   let completedAssets = 0;
   const progressed = () => options.onAssetProgress?.(++completedAssets, totalAssets);
   if (totalAssets > 0) options.onAssetProgress?.(0, totalAssets);
@@ -102,14 +107,13 @@ export async function syncEncryptedPages(options: {
     for (const photo of original.photos ?? []) {
       const assetId = photo.assetId ?? await uploadEncryptedAsset({ userId, journalId, journalKey, source: photo.src, name: `photo-${photo.id}` }).then(id => { progressed(); return id; });
       if (!assetId) throw new Error("The encrypted photo upload did not return an asset ID.");
-      referencedIds.add(assetId);
       photos.push({ ...photo, assetId });
     }
-    const drawingAssetId = original.drawingData
-      ? original.drawingAssetId ?? await uploadEncryptedAsset({ userId, journalId, journalKey, source: original.drawingData, name: `drawing-${id}.png` }).then(assetId => { progressed(); return assetId; })
-      : undefined;
-    if (drawingAssetId) referencedIds.add(drawingAssetId);
-    const runtimePage: PageData = { ...original, id, photos, drawingAssetId };
+    // A fresh drawing replaces the encrypted value in this page's existing row.
+    // Legacy immutable asset references remain readable until the user edits.
+    const inlineDrawing = !original.drawingAssetId && original.drawingData ? await prepareInlineDrawing(original.drawingData) : undefined;
+    const drawingAssetId = inlineDrawing ? undefined : original.drawingAssetId;
+    const runtimePage: PageData = { ...original, id, photos, drawingAssetId, drawingData: inlineDrawing ?? original.drawingData };
     runtimePages.push(runtimePage);
     const payload: PersistedPage = {
       pageName: runtimePage.pageName,
@@ -119,6 +123,7 @@ export async function syncEncryptedPages(options: {
       placed: runtimePage.placed,
       photos: runtimePage.photos.map(photo => ({ id: photo.id, assetId: photo.assetId, x: photo.x, y: photo.y, rotation: photo.rotation, framed: photo.framed, z: photo.z, size: photo.size, shape: photo.shape, locked: photo.locked })),
       drawingAssetId: runtimePage.drawingAssetId,
+      drawingData: inlineDrawing,
       joys: runtimePage.joys,
       joysVisible: runtimePage.joysVisible,
       joyLocked: runtimePage.joyLocked,
@@ -146,8 +151,8 @@ export async function syncEncryptedPages(options: {
     records.push({ id, position, encrypted_payload });
   }
 
-  const { error } = await createClient().rpc("sync_encrypted_pages", { p_journal_id: journalId, p_pages: records });
+  const { data, error } = await createClient().rpc("sync_encrypted_pages", { p_journal_id: journalId, p_pages: records, p_expected_revision: options.expectedRevision });
   fail(error);
-  await cleanupUnreferencedAssets(journalId, referencedIds);
-  return runtimePages;
+  if (!validRevision(data) || data !== options.expectedRevision + 1) throw new Error("The saved journal revision could not be verified. Reopen the journal before retrying.");
+  return { pages: runtimePages, revision: data };
 }

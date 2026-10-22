@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { decryptJson, generateEncryptionKey } from "@/lib/crypto";
-import { cloudDraftKey, hasPendingCloudDraft, markCloudDraftSynced, readCloudDraft, writeCloudDraft } from "@/lib/cloud-drafts";
+import { acknowledgeRecoveredDraft, cloudDraftKey, hasPendingCloudDraft, markCloudDraftSynced, readCloudDraft, writeCloudDraft } from "@/lib/cloud-drafts";
 import type { PageData } from "@/lib/journal-model";
 
 const page: PageData = {
@@ -70,5 +70,27 @@ describe("cloud draft queue", () => {
     const restored = (await readCloudDraft("journal-3", key))?.pages[0];
     expect(restored?.photos[0].src).toBe("");
     expect(restored?.drawingData).toBe("");
+  });
+  it("isolates two tabs and keeps the losing tab's revision and private draft", async () => {
+    const a = await writeCloudDraft("shared", [{ ...page, note: "A edit" }], "Sage", true, key, 0, "tab-a");
+    await writeCloudDraft("shared", [{ ...page, note: "B edit" }], "Sage", true, key, 0, "tab-b");
+    await markCloudDraftSynced("shared", [{ ...page, note: "A edit" }], "Sage", key, 1, "tab-a", a.draftToken);
+    expect((await readCloudDraft("shared", key, "tab-a"))?.pendingSync).toBe(false);
+    expect(await readCloudDraft("shared", key, "tab-b")).toMatchObject({ baseRevision: 0, pendingSync: true, pages: [{ note: "B edit" }] });
+    expect((await readCloudDraft("shared", key))?.pages[0].note).toBe("B edit");
+    expect(localStorage.getItem(cloudDraftKey("shared", "tab-b"))).not.toContain("B edit");
+  });
+  it("does not mark a newer edit synced when an older request completes", async () => {
+    const older = await writeCloudDraft("shared", [page], "Sage", true, key, 2, "tab-a");
+    await writeCloudDraft("shared", [{ ...page, note: "Newer edit" }], "Sage", true, key, 2, "tab-a");
+    expect(await markCloudDraftSynced("shared", [page], "Sage", key, 3, "tab-a", older.draftToken)).toBeNull();
+    expect(await readCloudDraft("shared", key, "tab-a")).toMatchObject({ pendingSync: true, pages: [{ note: "Newer edit" }] });
+  });
+  it("does not discard a recovered draft that was subsequently changed", async () => {
+    await writeCloudDraft("shared", [page], "Sage", true, key, 2, "old-tab");
+    const recovered = (await readCloudDraft("shared", key, "old-tab"))!;
+    await writeCloudDraft("shared", [{ ...page, note: "Other tab kept writing" }], "Sage", true, key, 2, "old-tab");
+    await acknowledgeRecoveredDraft("shared", key, recovered);
+    expect((await readCloudDraft("shared", key, "old-tab"))?.pages[0].note).toBe("Other tab kept writing");
   });
 });
