@@ -28,8 +28,21 @@ async function writePersistedMasterKey(userId: string, key: CryptoKey) {
   db.close();
 }
 
-export function setAccountMasterKey(key: CryptoKey, userId?: string, persist = true) {
+async function deletePersistedMasterKey() {
+  const db = await openVault();
+  if (!db) return;
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    transaction.objectStore(STORE_NAME).delete(MASTER_KEY_ID);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error);
+  });
+  db.close();
+}
+
+export function setAccountMasterKey(key: CryptoKey, userId?: string, persist = false) {
   accountMasterKey = key;
+  if (isHighSecurityMode()) return deletePersistedMasterKey();
   return userId && persist ? writePersistedMasterKey(userId, key) : Promise.resolve();
 }
 
@@ -40,15 +53,7 @@ export function isHighSecurityMode() {
 export async function setHighSecurityMode(enabled: boolean) {
   localStorage.setItem("pin-paper-high-security", String(enabled));
   if (!enabled) return;
-  const db = await openVault();
-  if (!db) return;
-  await new Promise<void>((resolve, reject) => {
-    const transaction = db.transaction(STORE_NAME, "readwrite");
-    transaction.objectStore(STORE_NAME).delete(MASTER_KEY_ID);
-    transaction.oncomplete = () => resolve();
-    transaction.onerror = () => reject(transaction.error);
-  });
-  db.close();
+  await deletePersistedMasterKey();
 }
 
 export async function restoreAccountMasterKey(userId: string) {

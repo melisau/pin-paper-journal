@@ -9,6 +9,10 @@ const J = "20000000-0000-4000-8000-000000000001";
 const OTHER = "20000000-0000-4000-8000-000000000002";
 const P1 = "30000000-0000-4000-8000-000000000001";
 const P2 = "30000000-0000-4000-8000-000000000002";
+const P3 = "30000000-0000-4000-8000-000000000003";
+const J2 = "20000000-0000-4000-8000-000000000003";
+const A1 = "40000000-0000-4000-8000-000000000001";
+const A2 = "40000000-0000-4000-8000-000000000002";
 let db: PGlite;
 const records = (entries: Array<[string, string]>) => entries.map(([id, ciphertext], position) => ({ id, position, encrypted_payload: { ciphertext, iv: "test", version: 1 } }));
 const save = (revision: number, entries: Array<[string, string]>) => db.query<{ revision: number }>("select public.sync_encrypted_pages($1, $2::jsonb, $3) as revision", [J, JSON.stringify(records(entries)), revision]);
@@ -26,10 +30,11 @@ describe("versioned sync migration on PostgreSQL", () => {
       create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;
       create table public.journals (id uuid primary key, owner_id uuid not null, encrypted_metadata jsonb, wrapped_key_by_master jsonb, wrapped_key_by_password jsonb, is_password_protected boolean, updated_at timestamptz default now());
       create table public.pages (id uuid primary key, journal_id uuid references public.journals on delete cascade, owner_id uuid not null, encrypted_payload jsonb not null, position integer not null, updated_at timestamptz default now(), unique(journal_id, position));
-      create table public.encrypted_assets (id uuid primary key default gen_random_uuid(), journal_id uuid references public.journals on delete cascade, owner_id uuid not null, storage_path text not null unique);
+      create table public.encrypted_assets (id uuid primary key default gen_random_uuid(), journal_id uuid references public.journals on delete cascade, page_id uuid references public.pages on delete cascade, owner_id uuid not null, storage_path text not null unique, encrypted_metadata jsonb not null default '{}');
       create table storage.objects (name text primary key, bucket_id text, metadata jsonb default '{}');
       alter table public.journals enable row level security;
       alter table public.pages enable row level security;
+      alter table public.encrypted_assets enable row level security;
       alter table storage.objects enable row level security;
       create policy own_journals on public.journals for all to authenticated using(owner_id = auth.uid()) with check(owner_id = auth.uid());
       create policy own_pages on public.pages for all to authenticated using(owner_id = auth.uid()) with check(owner_id = auth.uid());
@@ -48,12 +53,14 @@ describe("versioned sync migration on PostgreSQL", () => {
     await db.exec(await readFile(new URL("../supabase/migrations/006_retryable_asset_cleanup.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/007_atomic_journal_deletion.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/008_protect_cleanup_jobs.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/009_close_audit_findings.sql", import.meta.url), "utf8"));
   }, 30000);
   afterAll(async () => { await db?.close(); });
   beforeEach(async () => {
     await db.exec("reset role; truncate public.journals cascade; truncate storage.objects; truncate auth.users cascade;");
     await db.query("insert into auth.users(id) values ($1),($2)", [A, B]);
     await db.query("insert into public.journals(id, owner_id) values ($1,$2),($3,$4)", [J, A, OTHER, B]);
+    await db.query("insert into public.pages(id,journal_id,owner_id,position,encrypted_payload) values ($1,$2,$3,0,'{}'::jsonb)", [P1, J, A]);
     await db.query("insert into storage.objects(name,bucket_id) values ($1, 'encrypted-journal-assets'), ($2, 'encrypted-journal-assets')", [`${A}/${J}/a.bin`, `${A}/${J}/b.bin`]);
     await db.query("select set_config('request.jwt.claim.sub', $1, false)", [A]);
     await db.exec("set role authenticated");
@@ -112,7 +119,7 @@ describe("versioned sync migration on PostgreSQL", () => {
     expect((await db.query("delete from storage.objects where name = $1 returning name", [`${A}/${J}/a.bin`])).rows).toHaveLength(1);
   });
   it("keeps a durable cleanup job after the journal row is deleted, then permits retry", async () => {
-    await db.query("insert into public.encrypted_assets(journal_id,owner_id,storage_path) values ($1,$2,$3),($1,$2,$4)", [J, A, `${A}/${J}/a.bin`, `${A}/${J}/b.bin`]);
+    await db.query("insert into public.encrypted_assets(id,journal_id,owner_id,storage_path) values ($1,$2,$3,$4),($5,$2,$3,$6)", [A1, J, A, `${A}/${J}/${A1}.bin`, A2, `${A}/${J}/${A2}.bin`]);
     const prepared = await db.query<{ job_id: string }>("select public.delete_encrypted_journal_with_cleanup($1) as job_id", [J]);
     const jobId = prepared.rows[0].job_id;
     expect(jobId).toBeTruthy();
@@ -155,11 +162,41 @@ describe("versioned sync migration on PostgreSQL", () => {
     await expect(db.query("update storage.objects set metadata = '{\"size\":200}' where name = $1", [`${A}/${J}/placeholder.bin`])).rejects.toThrow("encrypted_storage_quota_exceeded");
     await db.query("update storage.objects set metadata = '{\"size\":80}' where name = $1", [`${A}/${J}/placeholder.bin`]);
     const usage = await db.query<{ used_bytes: string }>("select used_bytes from public.encrypted_storage_usage()");
-    expect(Number(usage.rows[0].used_bytes)).toBe(250 * 1024 * 1024 - 20);
+    expect(Number(usage.rows[0].used_bytes)).toBe(250 * 1024 * 1024 - 18);
   });
   it("rejects oversized page payloads and media objects", async () => {
-    await expect(save(0, [[P1, "x".repeat(2 * 1024 * 1024)]])).rejects.toThrow("encrypted_page_too_large");
+    await expect(save(0, [[P1, "x".repeat(2 * 1024 * 1024)]])).rejects.toThrow("page_payload_too_large");
     await db.exec("reset role");
     await expect(db.query("update storage.objects set metadata = '{\"size\":3000000}' where name = $1", [`${A}/${J}/b.bin`])).rejects.toThrow("encrypted_asset_too_large");
+  });
+  it("rejects oversized page batches before any page or revision is changed", async () => {
+    const largeBatch = Array.from({ length: 9 }, (_, index) => ({
+      id: `50000000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+      position: index,
+      encrypted_payload: { ciphertext: "x".repeat(1024 * 1024) },
+    }));
+    await expect(db.query("select public.sync_encrypted_pages($1,$2::jsonb,0)", [J, JSON.stringify(largeBatch)])).rejects.toThrow("page_batch_too_large");
+    expect((await snapshot()).rows[0].snapshot.revision).toBe(0);
+    expect((await snapshot()).rows[0].snapshot.pages).toHaveLength(1);
+  });
+  it("does not count a completed Storage object if its measured size is absent", async () => {
+    const placeholder = `${A}/${J}/unknown-size.bin`;
+    await db.query("insert into storage.objects(name,bucket_id) values ($1,'encrypted-journal-assets')", [placeholder]);
+    await db.exec("reset role");
+    await expect(db.query("update storage.objects set metadata = '{}'::jsonb where name = $1", [placeholder])).rejects.toThrow("encrypted_asset_size_missing");
+  });
+  it("allows null page staging but rejects cross-journal page references and forged asset paths", async () => {
+    await db.query("insert into public.encrypted_assets(id,journal_id,page_id,owner_id,storage_path) values ($1,$2,null,$3,$4)", [A1, J, A, `${A}/${J}/${A1}.bin`]);
+    await expect(db.query("select id from public.encrypted_assets where id = $1", [A1])).resolves.toMatchObject({ rows: [{ id: A1 }] });
+
+    await db.exec("reset role");
+    await db.query("insert into public.journals(id,owner_id) values ($1,$2)", [J2, A]);
+    await db.query("insert into public.pages(id,journal_id,owner_id,position,encrypted_payload) values ($1,$2,$3,0,'{}'::jsonb)", [P3, J2, A]);
+    await db.query("insert into public.pages(id,journal_id,owner_id,position,encrypted_payload) values ($1,$2,$3,0,'{}'::jsonb)", [P2, OTHER, B]);
+    await db.query("select set_config('request.jwt.claim.sub', $1, false)", [A]);
+    await db.exec("set role authenticated");
+    await expect(db.query("insert into public.encrypted_assets(id,journal_id,page_id,owner_id,storage_path) values ($1,$2,$3,$4,$5)", [A2, J, P3, A, `${A}/${J}/${A2}.bin`])).rejects.toThrow(/row-level security/);
+    await expect(db.query("insert into public.encrypted_assets(id,journal_id,page_id,owner_id,storage_path) values ($1,$2,$3,$4,$5)", [A2, J, P2, A, `${A}/${J}/${A2}.bin`])).rejects.toThrow(/row-level security/);
+    await expect(db.query("insert into public.encrypted_assets(id,journal_id,owner_id,storage_path) values ($1,$2,$3,$4)", [A2, J, A, `${A}/${J}/somebody-elses.bin`])).rejects.toThrow(/row-level security/);
   });
 });

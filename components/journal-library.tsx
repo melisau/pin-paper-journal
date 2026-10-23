@@ -29,7 +29,7 @@ type Props = {
   onExport: () => void; onImport: (file: File) => void; onOpen: (id: string) => void;
   onRename: (id: string, title: string) => void; onToneChange: (id: string, tone: string) => void;
   onCoverChange: (id: string, cover?: JournalCover) => void;
-  localMigrationCount?: number; migrationBusy?: boolean; migratedLocalCount?: number; onMigrateLocal?: () => void; onRemoveMigratedLocal?: () => void;
+  localMigrationCount?: number; migrationBusy?: boolean; migratedLocalCount?: number; onMigrateLocal?: (backupPassword: string) => void; onRemoveMigratedLocal?: () => void;
   onSignOut?: () => void;
   storageUsage?: StorageUsage | null;
   pendingAssetDeletions?: PendingAssetDeletion[]; retryingDeletion?: string | null; onRetryAssetDeletion?: (job: PendingAssetDeletion) => void;
@@ -41,6 +41,10 @@ export function JournalLibrary({ books, busy = false, message, onCreate, onDelet
   const [paletteId, setPaletteId] = useState<string | null>(null);
   const [appearanceTab, setAppearanceTab] = useState<"covers" | "colours">("covers");
   const [libraryEditing, setLibraryEditing] = useState(false);
+  const [migrationPasswordOpen, setMigrationPasswordOpen] = useState(false);
+  const [migrationPassword, setMigrationPassword] = useState("");
+  const [migrationPasswordConfirmation, setMigrationPasswordConfirmation] = useState("");
+  const [migrationPasswordError, setMigrationPasswordError] = useState("");
   const [draft, setDraft] = useState("");
   const shelfRef = useRef<HTMLDivElement>(null);
   const shelfDragRef = useRef<{ pointerId: number; startX: number; startScrollLeft: number; moved: boolean } | null>(null);
@@ -106,8 +110,14 @@ export function JournalLibrary({ books, busy = false, message, onCreate, onDelet
       <progress value={storageUsage.usedBytes} max={storageUsage.quotaBytes}/>
     </section>}
     {localMigrationCount > 0 && <section className="migration-card">
-      <span><CloudUpload/></span><div><strong>{t("Bring your local journals with you")}</strong><p>{language === "tr" ? `${localMigrationCount} defter şifrelenip özel bulut rafına taşınmaya hazır. Önce bir yedek indirilir; yerel kopyalar korunur.` : `${localMigrationCount} ${localMigrationCount === 1 ? "journal is" : "journals are"} ready to encrypt and move to your private cloud shelf. A backup downloads first, and the local copies stay untouched.`}</p></div>
-      <button onClick={onMigrateLocal} disabled={migrationBusy}>{t(migrationBusy ? "Encrypting & moving…" : "Back up & move to cloud")}</button>
+      <span><CloudUpload/></span><div><strong>{t("Bring your local journals with you")}</strong><p>{language === "tr" ? `${localMigrationCount} defter şifrelenip özel bulut rafına taşınmaya hazır. Önce parola korumalı bir yedek indirilir; yerel kopyalar korunur.` : `${localMigrationCount} ${localMigrationCount === 1 ? "journal is" : "journals are"} ready to encrypt and move to your private cloud shelf. A password-protected backup downloads first, and the local copies stay untouched.`}</p></div>
+      {!migrationPasswordOpen ? <button onClick={() => setMigrationPasswordOpen(true)} disabled={migrationBusy}>{t("Back up & move to cloud")}</button> : <form className="migration-password-form" onSubmit={event => {event.preventDefault();if(migrationPassword.length<10){setMigrationPasswordError(t("Use at least 10 characters for the backup password."));return}if(migrationPassword!==migrationPasswordConfirmation){setMigrationPasswordError(t("The backup passwords do not match."));return}setMigrationPasswordError("");onMigrateLocal?.(migrationPassword);setMigrationPassword("");setMigrationPasswordConfirmation("")}}>
+        <label>{t("Backup password")}<input type="password" autoComplete="new-password" minLength={10} required value={migrationPassword} onChange={event=>setMigrationPassword(event.target.value)}/></label>
+        <label>{t("Confirm backup password")}<input type="password" autoComplete="new-password" minLength={10} required value={migrationPasswordConfirmation} onChange={event=>setMigrationPasswordConfirmation(event.target.value)}/></label>
+        <small>{t("You will need this password to restore the downloaded backup.")}</small>
+        {migrationPasswordError&&<small role="alert">{migrationPasswordError}</small>}
+        <div><button type="submit" disabled={migrationBusy}>{t(migrationBusy?"Encrypting & moving…":"Encrypt backup & move")}</button><button type="button" onClick={()=>{setMigrationPasswordOpen(false);setMigrationPassword("");setMigrationPasswordConfirmation("");setMigrationPasswordError("")}} disabled={migrationBusy}>{t("Cancel")}</button></div>
+      </form>}
     </section>}
     {migratedLocalCount > 0 && <section className="migration-card">
       <span><Check/></span><div><strong>{t("Your cloud copies are ready")}</strong><p>{language === "tr" ? `Orijinal ${migratedLocalCount} yerel defter hâlâ bu cihazda. Yalnızca ek kopyaya ihtiyacın yoksa kaldır.` : `The original local ${migratedLocalCount === 1 ? "journal is" : "journals are"} still on this device. Remove them only if you no longer need the extra local copy.`}</p></div>

@@ -5,6 +5,7 @@ export const LANGUAGE_STORAGE_KEY = "pin-paper-language";
 const turkish: Record<string, string> = {
   "Your encrypted storage is full (250 MB). Remove unused journals or reduce page content before adding more images.": "Şifreli depolaman dolu (250 MB). Yeni görsel eklemeden önce kullanmadığın defterleri kaldır veya sayfa içeriğini azalt.",
   "This page is too large to save. Move some content to another page and try again.": "Bu sayfa kaydedilemeyecek kadar büyük. İçeriğin bir kısmını başka sayfaya taşı ve yeniden dene.",
+  "This group of pages is too large to save at once. Save fewer pages at a time.": "Bu sayfa grubu tek seferde kaydedilemeyecek kadar büyük. Daha az sayfayı aynı anda kaydet.",
   "This drawing is too large to save. Keep this page open and simplify the drawing.": "Bu çizim kaydedilemeyecek kadar büyük. Sayfayı açık tut ve çizimi sadeleştir.",
   "Drawing compression is unavailable in this browser.": "Bu tarayıcıda çizim sıkıştırma kullanılamıyor.",
   "This drawing format could not be saved safely.": "Bu çizim biçimi güvenli şekilde kaydedilemedi.",
@@ -75,6 +76,8 @@ const turkish: Record<string, string> = {
   "Encrypted storage": "Şifreli depolama", "Encrypted photo storage usage": "Şifreli fotoğraf depolama kullanımı", "of": "/",
   "Bring your local journals with you": "Yerel defterlerini yanında getir",
   "Encrypting & moving…": "Şifreleniyor ve taşınıyor…", "Back up & move to cloud": "Yedekle ve buluta taşı",
+  "Backup password": "Yedek parolası", "Confirm backup password": "Yedek parolasını doğrula", "You will need this password to restore the downloaded backup.": "İndirilen yedeği geri yüklemek için bu parola gerekecek.",
+  "The backup passwords do not match.": "Yedek parolaları eşleşmiyor.", "Use at least 10 characters for the backup password.": "Yedek parolası en az 10 karakter olmalı.", "Encrypt backup & move": "Yedeği şifrele ve taşı", "Cancel": "İptal",
   "Your cloud copies are ready": "Bulut kopyaların hazır", "Remove local copy": "Yerel kopyayı kaldır", "Remove local copies": "Yerel kopyaları kaldır",
   "YOUR STORY STARTS HERE": "HİKÂYEN BURADA BAŞLIYOR", "A blank shelf, ready for you": "Boş bir raf seni bekliyor",
   "Make a private little home for thoughts, photographs and everyday magic.": "Düşüncelerin, fotoğrafların ve günlük anların için özel bir yer aç.",

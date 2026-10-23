@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { DM_Sans, Fraunces, Inter, Lora } from "next/font/google";
 import { THEME_BOOTSTRAP } from "@/lib/theme";
 import "./globals.css";
@@ -14,6 +15,7 @@ export const metadata: Metadata = {
   description: "A private, encrypted digital journal for memories, photos and little joys.",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="en" suppressHydrationWarning className={`${lora.variable} ${dmSans.variable} ${fraunces.variable} ${inter.variable}`}><head><script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }}/></head><body>{children}</body></html>;
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  return <html lang="en" suppressHydrationWarning className={`${lora.variable} ${dmSans.variable} ${fraunces.variable} ${inter.variable}`}><head><script nonce={nonce} dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }}/></head><body>{children}</body></html>;
 }

@@ -18,6 +18,8 @@ type PersistedPage = Omit<PageData, "id" | "photos" | "drawingData"> & {
 function fail(error: { message: string } | null) {
   if (error?.message.includes("encrypted_storage_quota_exceeded")) throw new JournalStorageLimitError();
   if (error?.message.includes("encrypted_page_too_large")) throw new JournalStorageLimitError("This page is too large to save. Move some content to another page and try again.");
+  if (error?.message.includes("page_payload_too_large")) throw new JournalStorageLimitError("This page is too large to save. Move some content to another page and try again.");
+  if (error?.message.includes("page_batch_too_large")) throw new Error("This group of pages is too large to save at once. Save fewer pages at a time.");
   if (error?.message.includes("journal_revision_conflict")) throw new JournalSyncConflictError();
   if (error) throw new Error(/sync_encrypted_pages|load_encrypted_journal_snapshot/.test(error.message) ? "Apply supabase/migrations/004_versioned_page_sync.sql before syncing pages." : error.message);
 }

@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookOpen, KeyRound, LockKeyhole } from "lucide-react";
 import { rewrapAccountKeyWithRecovery, type WrappedKey } from "@/lib/crypto";
-import { setAccountMasterKey } from "@/lib/key-vault";
+import { isHighSecurityMode, setAccountMasterKey } from "@/lib/key-vault";
 import { createClient } from "@/lib/supabase/client";
 import { LanguageSwitcher, useLanguage } from "@/components/language-switcher";
 
@@ -43,7 +43,7 @@ export function RecoveryForm() {
         .eq("user_id", userData.user.id);
       if (wrapError) throw new Error(`Your password changed, but the encryption key could not be updated: ${wrapError.message}. Retry with the same new password and recovery code.`);
 
-      await setAccountMasterKey(recovered.masterKey, userData.user.id);
+      await setAccountMasterKey(recovered.masterKey, userData.user.id, !isHighSecurityMode());
       setMessage("Password updated. Opening your encrypted journals…");
       router.replace("/journal");
     } catch (error) {

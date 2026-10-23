@@ -1,6 +1,8 @@
 import { createEncryptedJournal } from "@/lib/journal-repository";
 import type { Book, PageData } from "@/lib/journal-model";
 import { loadEncryptedPages, syncEncryptedPages } from "@/lib/page-repository";
+import { encryptBackup, type JournalBackup } from "@/lib/local-backup";
+import { downloadBackupFile } from "@/lib/cloud-backup";
 
 const BOOKS_KEY = "pin-paper-journal-books";
 const LEDGER_KEY = "pin-paper-cloud-migration-v1";
@@ -71,20 +73,19 @@ export function getLocalMigrationSources(): MigrationSource[] {
   return sources;
 }
 
-export function downloadMigrationBackup(sources: MigrationSource[]) {
-  const backup = {
+export function makeMigrationBackup(sources: MigrationSource[]): JournalBackup {
+  return {
     app: "pin-paper-journal",
     version: 1,
     exportedAt: new Date().toISOString(),
     books: sources.map(source => source.book),
     journals: Object.fromEntries(sources.map(source => [source.book.id, source.raw])),
   };
-  const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = `pin-paper-before-cloud-${new Date().toISOString().slice(0, 10)}.json`;
-  anchor.click();
-  URL.revokeObjectURL(url);
+}
+
+export async function downloadMigrationBackup(sources: MigrationSource[], password: string) {
+  const backup = await encryptBackup(makeMigrationBackup(sources), password);
+  downloadBackupFile(backup);
 }
 
 export async function migrateLocalJournals(options: { userId: string; masterKey: CryptoKey; sources: MigrationSource[] }) {
