@@ -85,6 +85,36 @@ export async function readCloudDraft(journalId: string, key: CryptoKey, slot?: s
   return null;
 }
 
+/** Read this tab's draft, falling back only to the pre-slot legacy record. */
+export async function readTabCloudDraft(journalId: string, key: CryptoKey, slot: string) {
+  const own = await readCloudDraft(journalId, key, slot);
+  if (own) return own;
+  const readLegacy = async () => {
+    const claimKey = `pin-paper-cloud-draft-claim-v1:${journalId}`;
+    type DraftClaim = { slot: string; expiresAt: number };
+    let claim: DraftClaim | null = null;
+    try { claim = JSON.parse(localStorage.getItem(claimKey) || "null") as DraftClaim | null; } catch { /* Replace malformed stale claim. */ }
+    if (claim && claim.expiresAt > Date.now() && claim.slot !== slot) return null;
+    localStorage.setItem(claimKey, JSON.stringify({ slot, expiresAt: Date.now() + 60_000 }));
+    try {
+      const legacy = await readCloudDraft(journalId, key, "");
+      if (!legacy) return null;
+      const moved = await writeCloudDraft(journalId, legacy.pages, legacy.theme, Boolean(legacy.pendingSync), key, legacy.baseRevision, slot);
+      await acknowledgeRecoveredDraft(journalId, key, legacy);
+      return { ...moved, draftSlot: slot };
+    } finally {
+      try {
+        const current = JSON.parse(localStorage.getItem(claimKey) || "null") as DraftClaim | null;
+        if (current?.slot === slot) localStorage.removeItem(claimKey);
+      } catch { /* A stale claim expires and can be reclaimed. */ }
+    }
+  };
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    return navigator.locks.request(`pin-paper-legacy-draft:${journalId}`, { mode: "exclusive" }, readLegacy);
+  }
+  return readLegacy();
+}
+
 async function storeCloudDraft(journalId: string, document: JournalDocument, pendingSync: boolean, key: CryptoKey, expectedRaw?: string, slot?: string): Promise<JournalDocument | null> {
   const encryptedDocument = { ...document, pendingSync };
   const payload = await encryptJson<DraftPayload>({ journalId, document: encryptedDocument }, key);
@@ -123,6 +153,15 @@ export async function acknowledgeRecoveredDraft(journalId: string, key: CryptoKe
   const raw = localStorage.getItem(storageKey);
   const latest = await readCloudDraft(journalId, key, recovered.draftSlot ?? "");
   if (latest && latest.updatedAt === recovered.updatedAt && latest.draftToken === recovered.draftToken && localStorage.getItem(storageKey) === raw) localStorage.removeItem(storageKey);
+}
+
+export async function discardRecoveredDraft(journalId: string, key: CryptoKey, recovered: JournalDocument, currentSlot: string) {
+  await acknowledgeRecoveredDraft(journalId, key, recovered);
+  if (recovered.draftSlot === currentSlot) return;
+  const current = await readCloudDraft(journalId, key, currentSlot);
+  if (current?.pendingSync && current.updatedAt === recovered.updatedAt && current.draftToken === recovered.draftToken) {
+    localStorage.removeItem(cloudDraftKey(journalId, currentSlot));
+  }
 }
 
 export async function hasPendingCloudDraft(journalId: string, key: CryptoKey) {

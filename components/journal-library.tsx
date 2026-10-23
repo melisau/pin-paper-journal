@@ -8,6 +8,7 @@ import { coverBodyStyle, JOURNAL_COVERS, type CoverChoice } from "@/lib/journal-
 import { formatStorage, type StorageUsage } from "@/lib/storage-usage";
 import { LanguageSwitcher, useLanguage } from "@/components/language-switcher";
 import { LibraryLoadingBooks } from "@/components/library-loading-books";
+import type { PendingAssetDeletion } from "@/lib/journal-repository";
 
 export type { Book } from "@/lib/journal-model";
 
@@ -31,9 +32,10 @@ type Props = {
   localMigrationCount?: number; migrationBusy?: boolean; migratedLocalCount?: number; onMigrateLocal?: () => void; onRemoveMigratedLocal?: () => void;
   onSignOut?: () => void;
   storageUsage?: StorageUsage | null;
+  pendingAssetDeletions?: PendingAssetDeletion[]; retryingDeletion?: string | null; onRetryAssetDeletion?: (job: PendingAssetDeletion) => void;
 };
 
-export function JournalLibrary({ books, busy = false, message, onCreate, onDelete, onExport, onImport, onOpen, onRename, onToneChange, onCoverChange, localMigrationCount = 0, migrationBusy = false, migratedLocalCount = 0, onMigrateLocal, onRemoveMigratedLocal, onSignOut, storageUsage }: Props) {
+export function JournalLibrary({ books, busy = false, message, onCreate, onDelete, onExport, onImport, onOpen, onRename, onToneChange, onCoverChange, localMigrationCount = 0, migrationBusy = false, migratedLocalCount = 0, onMigrateLocal, onRemoveMigratedLocal, onSignOut, storageUsage, pendingAssetDeletions = [], retryingDeletion = null, onRetryAssetDeletion }: Props) {
   const { language, t } = useLanguage();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [paletteId, setPaletteId] = useState<string | null>(null);
@@ -112,6 +114,7 @@ export function JournalLibrary({ books, busy = false, message, onCreate, onDelet
       <button onClick={onRemoveMigratedLocal}>{t(migratedLocalCount === 1 ? "Remove local copy" : "Remove local copies")}</button>
     </section>}
     {message && <p className="library-notice" role="status"><Sparkles/>{t(message)}</p>}
+    {pendingAssetDeletions.length > 0 && <section className="migration-card pending-cleanup-card"><span><CloudUpload/></span><div><strong>{t("Encrypted files are waiting for cleanup")}</strong><p>{t("A deleted journal still has encrypted files in storage. Retry cleanup to release that space.")}</p>{pendingAssetDeletions.map(job => <div key={job.id} className="pending-cleanup-job"><span>{t("Deleted journal")} · {job.storage_paths.length} {t("files")}</span><button type="button" onClick={() => onRetryAssetDeletion?.(job)} disabled={retryingDeletion === job.id || busy}>{retryingDeletion === job.id ? t("Retrying…") : t("Retry cleanup")}</button></div>)}</div></section>}
     <div className="shelf-scene" aria-busy={busy}><div className="shelf-track">
       {shelfScroll.left && <button className="shelf-scroll-button shelf-scroll-left" onClick={() => scrollShelf(-1)} aria-label={t("Scroll journals left")}><ChevronLeft/></button>}
       <div className={`books-row ${shelfScroll.left || shelfScroll.right ? "draggable-shelf" : ""}`} ref={shelfRef} onPointerDown={startShelfDrag} onPointerMove={moveShelfDrag} onPointerUp={stopShelfDrag} onPointerCancel={stopShelfDrag} onClickCapture={event => { if (!suppressShelfClickRef.current) return; event.preventDefault(); event.stopPropagation(); suppressShelfClickRef.current = false; }} onDragStart={event => event.preventDefault()}>

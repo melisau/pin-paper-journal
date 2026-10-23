@@ -106,16 +106,41 @@ export async function updateEncryptedJournal(masterKey: CryptoKey, book: Book, c
 
 export async function deleteEncryptedJournal(id: string) {
   const supabase = createClient();
-  const { data: assets, error: assetError } = await supabase.from("encrypted_assets").select("storage_path").eq("journal_id", id);
-  message(assetError);
-  const paths = (assets ?? []).map(asset => asset.storage_path);
-  // Storage deletion is allowed only after the journal is gone; stale saves
-  // must never be able to remove another writer's media.
-  const { error } = await supabase.from("journals").delete().eq("id", id);
+  // The RPC atomically queues the exact paths and deletes the journal row.
+  const { data: jobId, error } = await supabase.rpc("delete_encrypted_journal_with_cleanup", { p_journal_id: id });
   message(error);
   clearJournalKey(id);
-  if (paths.length) {
-    const { error: storageError } = await supabase.storage.from("encrypted-journal-assets").remove(paths);
-    message(storageError);
+  if (jobId) {
+    const { data: job, error: jobError } = await supabase.from("pending_journal_asset_deletions").select("storage_paths").eq("id", jobId).single();
+    if (jobError) throw new JournalDeletionCleanupError(id, jobError.message);
+    if (!job) throw new JournalDeletionCleanupError(id, "the cleanup job could not be reopened");
+    const { error: storageError } = await supabase.storage.from("encrypted-journal-assets").remove(job.storage_paths);
+    if (storageError) throw new JournalDeletionCleanupError(id, storageError.message);
+    const { error: finishError } = await supabase.rpc("finish_journal_asset_deletion", { p_job_id: jobId });
+    if (finishError) throw new JournalDeletionCleanupError(id, finishError.message);
   }
+}
+
+export class JournalDeletionCleanupError extends Error {
+  readonly journalDeleted = true;
+  constructor(journalId: string, detail: string) {
+    super(`Journal ${journalId} was deleted, but its media cleanup is pending: ${detail}`);
+    this.name = "JournalDeletionCleanupError";
+  }
+}
+
+export type PendingAssetDeletion = { id: string; journal_id: string; storage_paths: string[]; created_at: string };
+
+export async function listPendingAssetDeletions(): Promise<PendingAssetDeletion[]> {
+  const { data, error } = await createClient().from("pending_journal_asset_deletions").select("id,journal_id,storage_paths,created_at").order("created_at", { ascending: true });
+  message(error);
+  return (data ?? []) as PendingAssetDeletion[];
+}
+
+export async function retryPendingAssetDeletion(job: PendingAssetDeletion) {
+  const supabase = createClient();
+  const { error: storageError } = await supabase.storage.from("encrypted-journal-assets").remove(job.storage_paths);
+  message(storageError);
+  const { error } = await supabase.rpc("finish_journal_asset_deletion", { p_job_id: job.id });
+  message(error);
 }

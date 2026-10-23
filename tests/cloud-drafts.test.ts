@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { decryptJson, generateEncryptionKey } from "@/lib/crypto";
-import { acknowledgeRecoveredDraft, cloudDraftKey, hasPendingCloudDraft, markCloudDraftSynced, readCloudDraft, writeCloudDraft } from "@/lib/cloud-drafts";
+import { acknowledgeRecoveredDraft, cloudDraftKey, hasPendingCloudDraft, markCloudDraftSynced, readCloudDraft, readTabCloudDraft, writeCloudDraft } from "@/lib/cloud-drafts";
 import type { PageData } from "@/lib/journal-model";
 
 const page: PageData = {
@@ -79,6 +79,15 @@ describe("cloud draft queue", () => {
     expect(await readCloudDraft("shared", key, "tab-b")).toMatchObject({ baseRevision: 0, pendingSync: true, pages: [{ note: "B edit" }] });
     expect((await readCloudDraft("shared", key))?.pages[0].note).toBe("B edit");
     expect(localStorage.getItem(cloudDraftKey("shared", "tab-b"))).not.toContain("B edit");
+    expect(await readTabCloudDraft("shared", key, "tab-a")).toMatchObject({ pendingSync: false, pages: [{ note: "A edit" }] });
+    expect(await readTabCloudDraft("shared", key, "tab-c")).toBeNull();
+  });
+  it("claims and moves a shared legacy draft into exactly one tab slot", async () => {
+    await writeCloudDraft("legacy-shared", [page], "Blush", true, key);
+    const first = await readTabCloudDraft("legacy-shared", key, "tab-a");
+    expect(first).toMatchObject({ draftSlot: "tab-a", pendingSync: true, pages: [{ note: "Safe locally" }] });
+    expect(await readTabCloudDraft("legacy-shared", key, "tab-b")).toBeNull();
+    expect(await readCloudDraft("legacy-shared", key, "")).toBeNull();
   });
   it("does not mark a newer edit synced when an older request completes", async () => {
     const older = await writeCloudDraft("shared", [page], "Sage", true, key, 2, "tab-a");

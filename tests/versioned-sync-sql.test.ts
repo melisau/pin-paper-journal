@@ -21,10 +21,12 @@ describe("versioned sync migration on PostgreSQL", () => {
       create role authenticated; create role anon;
       alter default privileges grant execute on functions to anon, authenticated;
       create schema auth; create schema storage;
+      create table auth.users(id uuid primary key);
       create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$;
       create function storage.foldername(name text) returns text[] language sql immutable as $$ select string_to_array(name, '/') $$;
       create table public.journals (id uuid primary key, owner_id uuid not null, encrypted_metadata jsonb, wrapped_key_by_master jsonb, wrapped_key_by_password jsonb, is_password_protected boolean, updated_at timestamptz default now());
       create table public.pages (id uuid primary key, journal_id uuid references public.journals on delete cascade, owner_id uuid not null, encrypted_payload jsonb not null, position integer not null, updated_at timestamptz default now(), unique(journal_id, position));
+      create table public.encrypted_assets (id uuid primary key default gen_random_uuid(), journal_id uuid references public.journals on delete cascade, owner_id uuid not null, storage_path text not null unique);
       create table storage.objects (name text primary key, bucket_id text, metadata jsonb default '{}');
       alter table public.journals enable row level security;
       alter table public.pages enable row level security;
@@ -36,16 +38,21 @@ describe("versioned sync migration on PostgreSQL", () => {
       create policy own_objects_read on storage.objects for select to authenticated using((storage.foldername(name))[1] = auth.uid()::text);
       grant usage on schema public, auth, storage to authenticated, anon;
       grant all on public.journals, public.pages, storage.objects to authenticated;
+      grant all on public.encrypted_assets to authenticated;
       grant select on public.journals, public.pages to anon;
     `);
     await db.exec(await readFile(new URL("../supabase/migrations/002_sync_encrypted_pages.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/003_storage_quota.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/004_versioned_page_sync.sql", import.meta.url), "utf8"));
     await db.exec(await readFile(new URL("../supabase/migrations/005_bounded_drawing_storage.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/006_retryable_asset_cleanup.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/007_atomic_journal_deletion.sql", import.meta.url), "utf8"));
+    await db.exec(await readFile(new URL("../supabase/migrations/008_protect_cleanup_jobs.sql", import.meta.url), "utf8"));
   }, 30000);
   afterAll(async () => { await db?.close(); });
   beforeEach(async () => {
-    await db.exec("reset role; truncate public.journals cascade; truncate storage.objects;");
+    await db.exec("reset role; truncate public.journals cascade; truncate storage.objects; truncate auth.users cascade;");
+    await db.query("insert into auth.users(id) values ($1),($2)", [A, B]);
     await db.query("insert into public.journals(id, owner_id) values ($1,$2),($3,$4)", [J, A, OTHER, B]);
     await db.query("insert into storage.objects(name,bucket_id) values ($1, 'encrypted-journal-assets'), ($2, 'encrypted-journal-assets')", [`${A}/${J}/a.bin`, `${A}/${J}/b.bin`]);
     await db.query("select set_config('request.jwt.claim.sub', $1, false)", [A]);
@@ -103,6 +110,18 @@ describe("versioned sync migration on PostgreSQL", () => {
   it("allows explicit journal deletion followed by storage cleanup", async () => {
     await db.query("delete from public.journals where id = $1", [J]);
     expect((await db.query("delete from storage.objects where name = $1 returning name", [`${A}/${J}/a.bin`])).rows).toHaveLength(1);
+  });
+  it("keeps a durable cleanup job after the journal row is deleted, then permits retry", async () => {
+    await db.query("insert into public.encrypted_assets(journal_id,owner_id,storage_path) values ($1,$2,$3),($1,$2,$4)", [J, A, `${A}/${J}/a.bin`, `${A}/${J}/b.bin`]);
+    const prepared = await db.query<{ job_id: string }>("select public.delete_encrypted_journal_with_cleanup($1) as job_id", [J]);
+    const jobId = prepared.rows[0].job_id;
+    expect(jobId).toBeTruthy();
+    expect((await db.query("select id from public.journals where id = $1", [J])).rows).toHaveLength(0);
+    expect((await db.query("select id,storage_paths from public.pending_journal_asset_deletions where id = $1", [jobId])).rows).toHaveLength(1);
+    expect((await db.query("delete from storage.objects where name = $1 returning name", [`${A}/${J}/b.bin`])).rows).toHaveLength(1);
+    await expect(db.query("delete from public.pending_journal_asset_deletions where id = $1", [jobId])).rejects.toThrow("permission denied");
+    await db.query("select public.finish_journal_asset_deletion($1)", [jobId]);
+    expect((await db.query("select id from public.pending_journal_asset_deletions where id = $1", [jobId])).rows).toHaveLength(0);
   });
   it("replaces repeated drawing snapshots without growing Storage object count", async () => {
     for (let revision = 0; revision < 20; revision++) await save(revision, [[P1, `encrypted sketch ${revision}`]]);

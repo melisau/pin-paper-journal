@@ -599,3 +599,4 @@
  pointer-events:none;
  transform:translateX(-50%);
 }
+.pending-cleanup-job{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:9px;padding-top:8px;border-top:1px solid #d7c9b8;font:12px/1.4 Arial;color:#716258}.pending-cleanup-job button{white-space:nowrap}.pending-cleanup-card{margin-top:14px}

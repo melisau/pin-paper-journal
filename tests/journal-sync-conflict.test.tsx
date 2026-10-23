@@ -3,13 +3,13 @@ import { fireEvent, render, waitFor, within } from "@testing-library/react";
 import { beforeAll, beforeEach, expect, it, vi } from "vitest";
 import type { PageData } from "@/lib/journal-model";
 import { generateEncryptionKey } from "@/lib/crypto";
-import { readCloudDraft } from "@/lib/cloud-drafts";
+import { readCloudDraft, writeCloudDraft } from "@/lib/cloud-drafts";
 import { JournalSyncConflictError } from "@/lib/sync-conflict";
 
 const state = vi.hoisted(() => ({ key: null as CryptoKey | null, revision: 0, pages: [] as PageData[], copies: [] as PageData[], copy: vi.fn(), sync: vi.fn(), router: { replace: vi.fn(), refresh: vi.fn() } }));
 vi.mock("next/navigation", () => ({ useRouter: () => state.router }));
 vi.mock("@/lib/key-vault", () => ({ getAccountMasterKey: () => state.key, hasAccountMasterKey: () => true, restoreAccountMasterKey: async () => true, clearPersistedAccountMasterKey: vi.fn() }));
-vi.mock("@/lib/journal-repository", () => ({ listEncryptedJournals: async () => [{ id: "shared", title: "Shared", tone: "sage", label: "notes" }], createEncryptedJournal: vi.fn(), updateEncryptedJournal: vi.fn(), deleteEncryptedJournal: vi.fn() }));
+vi.mock("@/lib/journal-repository", () => ({ listEncryptedJournals: async () => [{ id: "shared", title: "Shared", tone: "sage", label: "notes" }], createEncryptedJournal: vi.fn(), updateEncryptedJournal: vi.fn(), deleteEncryptedJournal: vi.fn(), listPendingAssetDeletions: async () => [], retryPendingAssetDeletion: vi.fn() }));
 vi.mock("@/lib/page-repository", () => ({
   loadEncryptedPages: async (_key: CryptoKey, id: string) => ({ pages: structuredClone(id === "copy" ? state.copies : state.pages), revision: id === "copy" ? 1 : state.revision }),
   syncEncryptedPages: state.sync, loadEncryptedPageMedia: vi.fn(), reloadEncryptedAsset: vi.fn(), repairEncryptedPhotos: vi.fn(),
@@ -60,4 +60,42 @@ it("keeps the stale tab's edits local and offers a separate journal without repl
   await waitFor(() => expect(qb.queryByRole("button", { name: "Save draft as a separate journal" })).not.toBeInTheDocument());
   expect(state.copies[0].note).toBe("B offline text");
   expect(state.pages[0].note).toBe("A new text");
+}, 15000);
+
+it("lets the user discard a conflicting draft and reopen the current cloud version", async () => {
+  const app = render(<JournalApp cloudUserId="user"/>);
+  const q = within(app.container);
+  await waitFor(() => expect(q.getByRole("button", { name: "Open Shared" })).toBeInTheDocument());
+  fireEvent.click(q.getByRole("button", { name: "Open Shared" }));
+  await waitFor(() => expect(q.getByRole("textbox", { name: "Page title" })).toHaveValue("Original"));
+  fireEvent.change(app.container.querySelector(".writing-area textarea")!, { target: { value: "My stale edit" } });
+  state.revision++;
+  fireEvent.click(q.getByRole("button", { name: /^Save journal,/ }));
+  await waitFor(() => expect(q.getByRole("button", { name: "Discard my draft and open cloud version" })).toBeInTheDocument());
+  fireEvent.click(q.getByRole("button", { name: "Discard my draft and open cloud version" }));
+  await waitFor(() => expect(q.queryByRole("button", { name: "Discard my draft and open cloud version" })).not.toBeInTheDocument());
+  await waitFor(() => expect(app.container.querySelector(".writing-area textarea")).toHaveValue("Original"));
+  expect(state.pages[0].note).toBe("Original");
+}, 15000);
+
+it("does not restore an active draft belonging to another tab", async () => {
+  await writeCloudDraft("shared", [{ ...state.pages[0], note: "Private edit in another tab" }], "Blush", true, state.key!, 0, "other-active-tab");
+  const app = render(<JournalApp cloudUserId="user"/>);
+  const q = within(app.container);
+  await waitFor(() => expect(q.getByRole("button", { name: "Open Shared" })).toBeInTheDocument());
+  fireEvent.click(q.getByRole("button", { name: "Open Shared" }));
+  await waitFor(() => expect(q.getByRole("textbox", { name: "Page title" })).toHaveValue("Original"));
+  expect(app.container.querySelector(".writing-area textarea")).toHaveValue("Original");
+  expect(state.sync).not.toHaveBeenCalled();
+}, 15000);
+
+it("silently acknowledges an old draft without a revision when it matches the cloud", async () => {
+  await writeCloudDraft("shared", structuredClone(state.pages), "Blush", true, state.key!);
+  const app = render(<JournalApp cloudUserId="user"/>);
+  const q = within(app.container);
+  await waitFor(() => expect(q.getByRole("button", { name: "Open Shared" })).toBeInTheDocument());
+  fireEvent.click(q.getByRole("button", { name: "Open Shared" }));
+  await waitFor(() => expect(q.getByRole("textbox", { name: "Page title" })).toHaveValue("Original"));
+  expect(q.queryByRole("button", { name: "Save draft as a separate journal" })).not.toBeInTheDocument();
+  expect(await readCloudDraft("shared", state.key!)).toBeNull();
 }, 15000);
